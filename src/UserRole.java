@@ -1,2 +1,2 @@
-public class UserRole {
+class UserRole {
 }

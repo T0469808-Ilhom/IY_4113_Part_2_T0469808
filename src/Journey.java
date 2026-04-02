@@ -82,6 +82,9 @@ class Journey {
     public BigDecimal getChargedFare() {
         return chargedFare;
     }
+    public void setChargedFare(BigDecimal chargedFare) {
+        this.chargedFare = chargedFare;
+    }
 
     public String toString() {
         return "ID=" + id + " | " + date + " | " + type + " | " + band + " | "

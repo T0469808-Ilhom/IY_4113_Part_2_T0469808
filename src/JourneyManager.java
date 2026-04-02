@@ -49,6 +49,7 @@ class JourneyManager {
         // Removing the journey by id not by index as I did before.
 
         boolean removed = false;
+        LocalDate affectedDate = null;
 
         int i = 0;
         while (i < journeys.size() && !removed) {
@@ -56,11 +57,16 @@ class JourneyManager {
             Journey j = journeys.get(i);
 
             if (j.getId() == id) {
+                affectedDate = j.getDate();
                 journeys.remove(i);
                 removed = true;
             } else {
                 i++;
             }
+        }
+
+        if (removed && affectedDate != null) {
+            recalculateChargedFaresForDay(affectedDate);
         }
 
         return removed;
@@ -109,4 +115,40 @@ class JourneyManager {
 
         return total;
     }
+    private void recalculateChargedFaresForDay(LocalDate date) {
+
+        int i = 0;
+        while (i < journeys.size()) {
+
+            Journey currentJourney = journeys.get(i);
+
+            if (currentJourney.getDate().equals(date)) {
+                BigDecimal runningTotal = getRunningTotalBeforeId(date, currentJourney.getType(), currentJourney.getId());
+                BigDecimal newChargedFare = calc.applyCap(runningTotal, currentJourney.getDiscountedFare(), currentJourney.getType());
+                currentJourney.setChargedFare(newChargedFare);
+            }
+
+            i++;
+        }
+    }
+    private BigDecimal getRunningTotalBeforeId(LocalDate date, CityRideDataset.PassengerType type, int currentId) {
+
+        BigDecimal total = new BigDecimal("0.00");
+
+        int i = 0;
+        while (i < journeys.size()) {
+
+            Journey j = journeys.get(i);
+
+            if (j.getDate().equals(date) && j.getType() == type && j.getId() < currentId) {
+                total = total.add(j.getChargedFare());
+            }
+
+            i++;
+        }
+
+        return total;
+    }
+
+
 }
