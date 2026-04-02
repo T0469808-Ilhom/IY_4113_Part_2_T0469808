@@ -1,2 +1,2 @@
-public class PassengerType {
+class PassengerType {
 }

@@ -1,2 +1,2 @@
-public class SystemConfig {
+class SystemConfig {
 }

@@ -1,2 +1,2 @@
-public class PaymentOption {
+class PaymentOption {
 }

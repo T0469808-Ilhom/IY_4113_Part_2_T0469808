@@ -1,2 +1,2 @@
-public class TimeBand {
+class TimeBand {
 }
