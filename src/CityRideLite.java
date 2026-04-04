@@ -339,9 +339,29 @@ public class CityRideLite {
 
         return answer;
     }
+    private static void startApp(Scanner sc) {
+    }
+
+    private static int readRoleChoice(Scanner sc) {
+        return 0;
+    }
+
+    private static void openRiderFlow(Scanner sc,
+                                      JourneyManager manager,
+                                      SummaryReport summaryReport,
+                                      //RiderMenu riderMenu,
+                                      ProfileManager profileManager,
+                                      ReportExporter reportExporter,
+                                      CsvFileHandler csvFileHandler,
+                                      JsonFileHandler jsonFileHandler) {
+    }
+
+    private static void openAdminFlow(Scanner sc,
+                                      AdminMenu adminMenu,
+                                      ConfigManager configManager) {
+    }
 
 }
-
 
 class FareCalculator {
 
@@ -408,7 +428,6 @@ class FareCalculator {
     }
 }
 
-
 class JourneyManager {
 
     private List<Journey> journeys;
@@ -420,6 +439,22 @@ class JourneyManager {
         journeys = new ArrayList<>();
         calc = new FareCalculator();
         nextID = 1;
+    }
+
+    public Journey findJourneyById(int id) {
+        return null;
+    }
+
+    public boolean editJourney(int id,
+                               LocalDate date,
+                               int fromZone,
+                               int toZone,
+                               CityRideDataset.TimeBand band,
+                               CityRideDataset.PassengerType type) {
+        return false;
+    }
+
+    public void recalculateChargedFaresForDay(LocalDate date) {
     }
 
     // return true if journey was added, false if not added
@@ -447,6 +482,7 @@ class JourneyManager {
 
             added = true;
         }
+
 
         return added;
     }
@@ -518,33 +554,280 @@ class JourneyManager {
 }
 
 class RiderProfile {
+
+    enum PaymentOption {
+        CARD,
+        CASH
+    }
+
+    private String name;
+    private CityRideDataset.PassengerType passengerType;
+    private PaymentOption defaultPaymentOption;
+
+    public RiderProfile() {
+    }
+
+    public RiderProfile(String name,
+                        CityRideDataset.PassengerType passengerType,
+                        PaymentOption defaultPaymentOption) {
+        this.name = name;
+        this.passengerType = passengerType;
+        this.defaultPaymentOption = defaultPaymentOption;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public CityRideDataset.PassengerType getPassengerType() {
+        return passengerType;
+    }
+
+    public void setPassengerType(CityRideDataset.PassengerType passengerType) {
+        this.passengerType = passengerType;
+    }
+
+    public PaymentOption getDefaultPaymentOption() {
+        return defaultPaymentOption;
+    }
+
+    public void setDefaultPaymentOption(PaymentOption defaultPaymentOption) {
+        this.defaultPaymentOption = defaultPaymentOption;
+    }
 }
 
-class ProfileManager{
+class ProfileManager {
 
+    public RiderProfile createProfile(String name,
+                                      CityRideDataset.PassengerType passengerType,
+                                      RiderProfile.PaymentOption paymentOption) {
+        return null;
+    }
+
+    public RiderProfile loadProfile(String filePath, JsonFileHandler jsonFileHandler) {
+        return null;
+    }
+
+    public boolean saveProfile(String filePath, JsonFileHandler jsonFileHandler) {
+        return false;
+    }
+
+    public RiderProfile getCurrentProfile() {
+        return null;
+    }
+
+    public void setCurrentProfile(RiderProfile profile) {
+    }
+
+    public boolean hasCurrentProfile() {
+        return false;
+    }
 }
 
-class ConfigManager{
+class RiderMenu {
+
+    public void showMenu(Scanner sc,
+                         JourneyManager manager,
+                         SummaryReport summaryReport,
+                         ProfileManager profileManager,
+                         ReportExporter reportExporter,
+                         CsvFileHandler csvFileHandler,
+                         JsonFileHandler jsonFileHandler) {
+    }
+
+    private void createProfileUI(Scanner sc, ProfileManager profileManager) {
+    }
+
+    private void loadProfileUI(Scanner sc, ProfileManager profileManager, JsonFileHandler jsonFileHandler) {
+    }
+
+    private void saveProfileUI(ProfileManager profileManager, JsonFileHandler jsonFileHandler) {
+    }
+
+    private void addJourneyUI(Scanner sc, JourneyManager manager, ProfileManager profileManager) {
+    }
+
+    private void editJourneyUI(Scanner sc, JourneyManager manager, ProfileManager profileManager) {
+    }
+
+    private void deleteJourneyUI(Scanner sc, JourneyManager manager) {
+    }
+
+    private void listJourneysUI(JourneyManager manager) {
+    }
+
+    private void showSummaryUI(Scanner sc, JourneyManager manager, SummaryReport summaryReport) {
+    }
+
+    private void importJourneysUI(Scanner sc, JourneyManager manager, CsvFileHandler csvFileHandler) {
+    }
+
+    private void exportJourneysUI(Scanner sc, JourneyManager manager, CsvFileHandler csvFileHandler) {
+    }
+
+    private void exportSummaryUI(Scanner sc,
+                                 JourneyManager manager,
+                                 SummaryReport summaryReport,
+                                 ReportExporter reportExporter,
+                                 ProfileManager profileManager) {
+    }
+
+    private void saveCurrentDayStateUI(ProfileManager profileManager,
+                                       JourneyManager manager,
+                                       JsonFileHandler jsonFileHandler) {
+    }
 }
 
-class CsvFileHandler{
+class ConfigManager {
+
+    public SystemConfig loadConfig(JsonFileHandler jsonFileHandler) {
+        return null;
+    }
+
+    public SystemConfig createDefaultConfig() {
+        return null;
+    }
+
+    public boolean saveConfig(SystemConfig config, JsonFileHandler jsonFileHandler) {
+        return false;
+    }
+
+    public SystemConfig getCurrentConfig() {
+        return null;
+    }
+
+    public void setCurrentConfig(SystemConfig config) {
+    }
+
+    public void updateBaseFare(int fromZone, int toZone, CityRideDataset.TimeBand band, BigDecimal fare) {
+    }
+
+    public void updateDiscount(CityRideDataset.PassengerType type, BigDecimal discount) {
+    }
+
+    public void updateDailyCap(CityRideDataset.PassengerType type, BigDecimal cap) {
+    }
+
+    public void updatePeakWindow(String peakStart, String peakEnd) {
+    }
 }
-class JsonFileHandler{
+
+class CsvFileHandler {
+
+    public List<Journey> importJourneys(String filePath) {
+        return new ArrayList<>();
+    }
+
+    public boolean exportJourneys(String filePath, List<Journey> journeys) {
+        return false;
+    }
+
+    public boolean exportLineItems(String filePath, List<Journey> journeys) {
+        return false;
+    }
+}
+
+class JsonFileHandler {
+
+    public RiderProfile loadProfile(String filePath) {
+        return null;
+    }
+
+    public boolean saveProfile(String filePath, RiderProfile profile) {
+        return false;
+    }
+
+    public SystemConfig loadConfig(String filePath) {
+        return null;
+    }
+
+    public boolean saveConfig(String filePath, SystemConfig config) {
+        return false;
+    }
 }
 
 class SystemConfig {
 
+    public BigDecimal getBaseFare(int fromZone, int toZone, CityRideDataset.TimeBand band) {
+        return null;
+    }
+
+    public void setBaseFare(int fromZone, int toZone, CityRideDataset.TimeBand band, BigDecimal fare) {
+    }
+
+    public BigDecimal getDiscount(CityRideDataset.PassengerType type) {
+        return null;
+    }
+
+    public void setDiscount(CityRideDataset.PassengerType type, BigDecimal discount) {
+    }
+
+    public BigDecimal getDailyCap(CityRideDataset.PassengerType type) {
+        return null;
+    }
+
+    public void setDailyCap(CityRideDataset.PassengerType type, BigDecimal cap) {
+    }
+
+    public String getPeakStart() {
+        return null;
+    }
+
+    public String getPeakEnd() {
+        return null;
+    }
+
+    public void setPeakWindow(String peakStart, String peakEnd) {
+    }
 }
 
 class ReportExporter {
 
+    public boolean exportSummaryAsText(String filePath,
+                                       String riderName,
+                                       LocalDate date,
+                                       SummaryReport summaryReport,
+                                       JourneyManager manager) {
+        return false;
+    }
+
+    public boolean exportSummaryAsCsv(String filePath,
+                                      String riderName,
+                                      LocalDate date,
+                                      SummaryReport summaryReport,
+                                      JourneyManager manager) {
+        return false;
+    }
 }
 
-class AdminMenu{
+class AdminMenu {
 
+    public void showMenu(Scanner sc, ConfigManager configManager) {
+    }
+
+    private boolean loginUI(Scanner sc) {
+        return false;
+    }
+
+    private void viewConfigUI(ConfigManager configManager) {
+    }
+
+    private void updateBaseFareUI(Scanner sc, ConfigManager configManager) {
+    }
+
+    private void updateDiscountUI(Scanner sc, ConfigManager configManager) {
+    }
+
+    private void updateDailyCapUI(Scanner sc, ConfigManager configManager) {
+    }
+
+    private void updatePeakWindowUI(Scanner sc, ConfigManager configManager) {
+    }
 }
-
-
 
 class SummaryReport {
 
@@ -631,9 +914,14 @@ class SummaryReport {
             from++;
         }
     }
+    public String buildSummaryText(JourneyManager manager, LocalDate date) {
+        return null;
+    }
+
+    public BigDecimal calculateSavings(JourneyManager manager, LocalDate date) {
+        return null;
+    }
 }
-
-
 
 class Journey {
     private LocalDate date;
@@ -724,6 +1012,23 @@ class Journey {
                 + " | discount=" + discountApplied
                 + " | discounted=" + discountedFare
                 + " | charged=" + chargedFare;
+    }
+    public void setDate(LocalDate date) {
+    }
+
+    public void setFromZone(int fromZone) {
+    }
+
+    public void setToZone(int toZone) {
+    }
+
+    public void setBand(CityRideDataset.TimeBand band) {
+    }
+
+    public void setType(CityRideDataset.PassengerType type) {
+    }
+
+    public void setChargedFare(BigDecimal chargedFare) {
     }
 }
 
