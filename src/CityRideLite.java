@@ -9,7 +9,9 @@ import java.util.HashMap;
 import java.util.Map;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
-
+import java.io.BufferedWriter;
+import java.io.FileWriter;
+import java.io.IOException;
 
 public class CityRideLite {
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("dd-MM-yyyy");
@@ -811,15 +813,25 @@ class ReportExporter {
                                        LocalDate date,
                                        SummaryReport summaryReport,
                                        JourneyManager manager) {
-        return false;
-    }
 
-    public boolean exportSummaryAsCsv(String filePath,
-                                      String riderName,
-                                      LocalDate date,
-                                      SummaryReport summaryReport,
-                                      JourneyManager manager) {
-        return false;
+        boolean success = false;
+
+        try {
+            BufferedWriter writer = new BufferedWriter(new FileWriter(filePath));
+
+            writer.write("Rider: " + riderName);
+            writer.newLine();
+            writer.newLine();
+            writer.write(summaryReport.buildSummaryText(manager, date));
+            writer.close();
+
+            success = true;
+
+        } catch (IOException ex) {
+            System.out.println("Error writing summary text file.");
+        }
+
+        return success;
     }
 }
 
@@ -933,9 +945,6 @@ class SummaryReport {
             from++;
         }
     }
-    public String buildSummaryText(JourneyManager manager, LocalDate date) {
-        return null;
-    }
 
     public BigDecimal calculateSavings(JourneyManager manager, LocalDate date) {
 
@@ -961,6 +970,71 @@ class SummaryReport {
         }
 
         return savings.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    public String buildSummaryText(JourneyManager manager, LocalDate date) {
+
+        List<Journey> list = manager.getJourneys();
+
+        int totalJourneys = 0;
+        BigDecimal totalCharged = new BigDecimal("0.00");
+        int mostExpensiveId = -1;
+        BigDecimal mostExpensiveFare = new BigDecimal("0.00");
+        int peakCount = 0;
+        int offPeakCount = 0;
+
+        int i = 0;
+        while (i < list.size()) {
+
+            Journey currentJourney = list.get(i);
+
+            if (currentJourney.getDate().equals(date)) {
+
+                totalJourneys++;
+                totalCharged = totalCharged.add(currentJourney.getChargedFare());
+
+                if (mostExpensiveId == -1 ||
+                        currentJourney.getChargedFare().compareTo(mostExpensiveFare) > 0) {
+                    mostExpensiveFare = currentJourney.getChargedFare();
+                    mostExpensiveId = currentJourney.getId();
+                }
+
+                if (currentJourney.getBand() == CityRideDataset.TimeBand.PEAK) {
+                    peakCount++;
+                } else {
+                    offPeakCount++;
+                }
+            }
+
+            i++;
+        }
+
+        BigDecimal average = new BigDecimal("0.00");
+        if (totalJourneys > 0) {
+            average = totalCharged.divide(new BigDecimal(totalJourneys), 2, RoundingMode.HALF_UP);
+        }
+
+        BigDecimal savings = calculateSavings(manager, date);
+
+        String text = "";
+        text = text + "CityRide Lite Daily Summary\n";
+        text = text + "Date: " + date + "\n";
+        text = text + "Total journeys: " + totalJourneys + "\n";
+        text = text + "Total charged: " + totalCharged.setScale(2, RoundingMode.HALF_UP) + "\n";
+        text = text + "Average cost per journey: " + average + "\n";
+
+        if (mostExpensiveId == -1) {
+            text = text + "Most expensive journey: none\n";
+        } else {
+            text = text + "Most expensive journey: ID=" + mostExpensiveId +
+                    " | charged=" + mostExpensiveFare.setScale(2, RoundingMode.HALF_UP) + "\n";
+        }
+
+        text = text + "Savings from cap: " + savings + "\n";
+        text = text + "Peak journeys: " + peakCount + "\n";
+        text = text + "Off-peak journeys: " + offPeakCount + "\n";
+
+        return text;
     }
 }
 
