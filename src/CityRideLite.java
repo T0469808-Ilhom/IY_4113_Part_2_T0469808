@@ -442,16 +442,22 @@ class JourneyManager {
     }
 
     public Journey findJourneyById(int id) {
-        return null;
-    }
 
-    public boolean editJourney(int id,
-                               LocalDate date,
-                               int fromZone,
-                               int toZone,
-                               CityRideDataset.TimeBand band,
-                               CityRideDataset.PassengerType type) {
-        return false;
+        Journey foundJourney = null;
+
+        int i = 0;
+        while (i < journeys.size() && foundJourney == null) {
+
+            Journey currentJourney = journeys.get(i);
+
+            if (currentJourney.getId() == id) {
+                foundJourney = currentJourney;
+            }
+
+            i++;
+        }
+
+        return foundJourney;
     }
 
     public void recalculateChargedFaresForDay(LocalDate date) {
@@ -602,10 +608,16 @@ class RiderProfile {
 
 class ProfileManager {
 
+    private RiderProfile currentProfile;
+
     public RiderProfile createProfile(String name,
                                       CityRideDataset.PassengerType passengerType,
                                       RiderProfile.PaymentOption paymentOption) {
-        return null;
+
+        RiderProfile profile = new RiderProfile(name, passengerType, paymentOption);
+        currentProfile = profile;
+
+        return profile;
     }
 
     public RiderProfile loadProfile(String filePath, JsonFileHandler jsonFileHandler) {
@@ -617,14 +629,21 @@ class ProfileManager {
     }
 
     public RiderProfile getCurrentProfile() {
-        return null;
+        return currentProfile;
     }
 
     public void setCurrentProfile(RiderProfile profile) {
+        currentProfile = profile;
     }
 
     public boolean hasCurrentProfile() {
-        return false;
+        boolean hasProfile = false;
+
+        if (currentProfile != null) {
+            hasProfile = true;
+        }
+
+        return hasProfile;
     }
 }
 
@@ -919,7 +938,29 @@ class SummaryReport {
     }
 
     public BigDecimal calculateSavings(JourneyManager manager, LocalDate date) {
-        return null;
+
+        BigDecimal savings = new BigDecimal("0.00");
+
+        List<Journey> list = manager.getJourneys();
+
+        int i = 0;
+        while (i < list.size()) {
+
+            Journey currentJourney = list.get(i);
+
+            if (currentJourney.getDate().equals(date)) {
+
+                BigDecimal discountedFare = currentJourney.getDiscountedFare();
+                BigDecimal chargedFare = currentJourney.getChargedFare();
+
+                BigDecimal journeySaving = discountedFare.subtract(chargedFare);
+                savings = savings.add(journeySaving);
+            }
+
+            i++;
+        }
+
+        return savings.setScale(2, RoundingMode.HALF_UP);
     }
 }
 
