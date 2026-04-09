@@ -462,8 +462,34 @@ class JourneyManager {
         return foundJourney;
     }
 
-    public void recalculateChargedFaresForDay(LocalDate date) {
+    private List<Journey> getJourneysForDate(LocalDate date) {
+        List<Journey> result = new ArrayList<>();
+
+        int i = 0;
+        while (i < journeys.size()) {
+            if (journeys.get(i).getDate().equals(date)) {
+                result.add(journeys.get(i));
+            }
+            i++;
+        }
+
+        return result;
     }
+
+    public void recalculateChargedFaresForDay(LocalDate date) {
+        List<Journey> dayJourneys = getJourneysForDate(date);
+        BigDecimal runningTotal = new BigDecimal("0.00");
+
+        int i = 0;
+        while (i < dayJourneys.size()) {
+            Journey j = dayJourneys.get(i);
+            BigDecimal newCharged = calc.applyCap(runningTotal, j.getDiscountedFare(), j.getType());
+            j.setChargedFare(newCharged);
+            runningTotal = runningTotal.add(newCharged);
+            i++;
+        }
+    }
+
 
     // return true if journey was added, false if not added
     public boolean addJourney(LocalDate date, int fromZone, int toZone, CityRideDataset.TimeBand band, CityRideDataset.PassengerType type) {
@@ -773,36 +799,56 @@ class JsonFileHandler {
 
 class SystemConfig {
 
+    // Stores base fares using the same key format as CityRideDataset: "from-to-BAND"
+    private Map<String, BigDecimal> baseFares;
+    private Map<CityRideDataset.PassengerType, BigDecimal> discounts;
+    private Map<CityRideDataset.PassengerType, BigDecimal> dailyCaps;
+    private String peakStart;
+    private String peakEnd;
+
+    public SystemConfig() {
+        baseFares = new HashMap<>();
+        discounts = new HashMap<>();
+        dailyCaps = new HashMap<>();
+        peakStart = "07:00";
+        peakEnd = "09:00";
+    }
+
     public BigDecimal getBaseFare(int fromZone, int toZone, CityRideDataset.TimeBand band) {
-        return null;
+        return baseFares.get(CityRideDataset.key(fromZone, toZone, band));
     }
 
     public void setBaseFare(int fromZone, int toZone, CityRideDataset.TimeBand band, BigDecimal fare) {
+        baseFares.put(CityRideDataset.key(fromZone, toZone, band), fare);
     }
 
     public BigDecimal getDiscount(CityRideDataset.PassengerType type) {
-        return null;
+        return discounts.get(type);
     }
 
     public void setDiscount(CityRideDataset.PassengerType type, BigDecimal discount) {
+        discounts.put(type, discount);
     }
 
     public BigDecimal getDailyCap(CityRideDataset.PassengerType type) {
-        return null;
+        return dailyCaps.get(type);
     }
 
     public void setDailyCap(CityRideDataset.PassengerType type, BigDecimal cap) {
+        dailyCaps.put(type, cap);
     }
 
     public String getPeakStart() {
-        return null;
+        return peakStart;
     }
 
     public String getPeakEnd() {
-        return null;
+        return peakEnd;
     }
 
     public void setPeakWindow(String peakStart, String peakEnd) {
+        this.peakStart = peakStart;
+        this.peakEnd = peakEnd;
     }
 }
 
