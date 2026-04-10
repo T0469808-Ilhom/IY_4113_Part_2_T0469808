@@ -728,39 +728,10 @@ class RiderMenu {
                                        JsonFileHandler jsonFileHandler) {
     }
 }
-
+//commit
 class ConfigManager {
 
-    public SystemConfig loadConfig(JsonFileHandler jsonFileHandler) {
-        return null;
-    }
 
-    public SystemConfig createDefaultConfig() {
-        return null;
-    }
-
-    public boolean saveConfig(SystemConfig config, JsonFileHandler jsonFileHandler) {
-        return false;
-    }
-
-    public SystemConfig getCurrentConfig() {
-        return null;
-    }
-
-    public void setCurrentConfig(SystemConfig config) {
-    }
-
-    public void updateBaseFare(int fromZone, int toZone, CityRideDataset.TimeBand band, BigDecimal fare) {
-    }
-
-    public void updateDiscount(CityRideDataset.PassengerType type, BigDecimal discount) {
-    }
-
-    public void updateDailyCap(CityRideDataset.PassengerType type, BigDecimal cap) {
-    }
-
-    public void updatePeakWindow(String peakStart, String peakEnd) {
-    }
 }
 
 class CsvFileHandler {
@@ -1175,21 +1146,29 @@ class Journey {
                 + " | charged=" + chargedFare;
     }
     public void setDate(LocalDate date) {
+        this.date = date;
     }
 
     public void setFromZone(int fromZone) {
+        this.fromZone = fromZone;
+        this.zonesCrossed = Math.abs(this.toZone - fromZone) + 1;
     }
 
     public void setToZone(int toZone) {
+        this.toZone = toZone;
+        this.zonesCrossed = Math.abs(toZone - this.fromZone) + 1;
     }
 
     public void setBand(CityRideDataset.TimeBand band) {
+        this.band = band;
     }
 
     public void setType(CityRideDataset.PassengerType type) {
+        this.type = type;
     }
 
     public void setChargedFare(BigDecimal chargedFare) {
+        this.chargedFare = chargedFare;
     }
 }
 
