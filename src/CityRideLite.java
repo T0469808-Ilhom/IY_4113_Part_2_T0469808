@@ -731,7 +731,76 @@ class RiderMenu {
 //commit
 class ConfigManager {
 
+    private SystemConfig currentConfig;
 
+    // Loads config from file. If it fails or file is missing, creates safe defaults instead
+    public SystemConfig loadConfig(JsonFileHandler jsonFileHandler) {
+        SystemConfig config = jsonFileHandler.loadConfig("config.json");
+
+        if (config == null) {
+            // File missing or invalid - start with safe default values
+            System.out.println("Config file not found. Using default values.");
+            config = createDefaultConfig();
+        }
+
+        currentConfig = config;
+        return currentConfig;
+    }
+
+    // Builds a default config using the values already defined in CityRideDataset
+    public SystemConfig createDefaultConfig() {
+        SystemConfig config = new SystemConfig();
+
+        // Load all base fares from the dataset as defaults
+        int from = 1;
+        while (from <= CityRideDataset.MAX_ZONE) {
+            int to = 1;
+            while (to <= CityRideDataset.MAX_ZONE) {
+                BigDecimal peakFare = CityRideDataset.getBaseFare(from, to, CityRideDataset.TimeBand.PEAK);
+                BigDecimal offPeakFare = CityRideDataset.getBaseFare(from, to, CityRideDataset.TimeBand.OFF_PEAK);
+                config.setBaseFare(from, to, CityRideDataset.TimeBand.PEAK, peakFare);
+                config.setBaseFare(from, to, CityRideDataset.TimeBand.OFF_PEAK, offPeakFare);
+                to++;
+            }
+            from++;
+        }
+
+        // Load default discounts from dataset
+        for (CityRideDataset.PassengerType type : CityRideDataset.PassengerType.values()) {
+            config.setDiscount(type, CityRideDataset.DISCOUNT_RATE.get(type));
+            config.setDailyCap(type, CityRideDataset.DAILY_CAP.get(type));
+        }
+
+        return config;
+    }
+
+    public boolean saveConfig(SystemConfig config, JsonFileHandler jsonFileHandler) {
+        return jsonFileHandler.saveConfig("config.json", config);
+    }
+
+    public SystemConfig getCurrentConfig() {
+        return currentConfig;
+    }
+
+    public void setCurrentConfig(SystemConfig config) {
+        currentConfig = config;
+    }
+
+    public void updateBaseFare(int fromZone, int toZone, CityRideDataset.TimeBand band, BigDecimal fare) {
+        currentConfig.setBaseFare(fromZone, toZone, band, fare);
+    }
+
+    public void updateDiscount(CityRideDataset.PassengerType type, BigDecimal discount) {
+        currentConfig.setDiscount(type, discount);
+    }
+
+    public void updateDailyCap(CityRideDataset.PassengerType type, BigDecimal cap) {
+        currentConfig.setDailyCap(type, cap);
+    }
+
+    public void updatePeakWindow(String peakStart, String peakEnd) {
+        currentConfig.setPeakWindow(peakStart, peakEnd);
+    }
 }
 
 class CsvFileHandler {
