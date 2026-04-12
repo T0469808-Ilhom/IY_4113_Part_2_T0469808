@@ -595,12 +595,6 @@ class AdminMenu {
     }
 }
 
-
-/*
- * SummaryReport builds and displays the end-of-day summary.
- * It loops through journeys for a given date and calculates
- * totals, averages, savings, and zone counts.
- */
 class SummaryReport {
 
     // Holds all calculated values for one day's summary
@@ -903,11 +897,90 @@ class Journey {
     }
 }
 
+class Money {
+
+    public static BigDecimal toMoney(BigDecimal value) {
+        return value.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    public static String formatMoney(BigDecimal value) {
+        return value.setScale(2, RoundingMode.HALF_UP).toPlainString();
+    }
+}
 
 class InputHelper {
 
     private static final DateTimeFormatter DATE_TIME_FORMAT =
             DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm");
+
+    public static int readIntInRange(Scanner scanner, String prompt, int min, int max) {
+        boolean valid = false;
+        int value = min;
+
+        while (!valid) {
+            System.out.print(prompt);
+            String input = scanner.nextLine().trim();
+
+            if (input.isEmpty()) {
+                System.out.println("Input cannot be blank.");
+            } else {
+                try {
+                    value = Integer.parseInt(input);
+
+                    if (value < min || value > max) {
+                        System.out.println("Please enter a number from " + min + " to " + max + ".");
+                    } else {
+                        valid = true;
+                    }
+
+                } catch (NumberFormatException e) {
+                    System.out.println("Please enter a whole number.");
+                }
+            }
+        }
+
+        return value;
+    }
+
+    public static boolean readYesNo(Scanner scanner, String prompt) {
+        boolean valid = false;
+        boolean answer = false;
+
+        while (!valid) {
+            System.out.print(prompt);
+            String input = scanner.nextLine().trim().toUpperCase();
+
+            if (input.equals("Y") || input.equals("YES")) {
+                answer = true;
+                valid = true;
+            } else if (input.equals("N") || input.equals("NO")) {
+                answer = false;
+                valid = true;
+            } else {
+                System.out.println("Please enter Y or N.");
+            }
+        }
+
+        return answer;
+    }
+
+    public static String readRequiredText(Scanner scanner, String prompt) {
+        boolean valid = false;
+        String text = "";
+
+        while (!valid) {
+            System.out.print(prompt);
+            text = scanner.nextLine().trim();
+
+            if (text.isEmpty()) {
+                System.out.println("Input cannot be blank.");
+            } else {
+                valid = true;
+            }
+        }
+
+        return text;
+    }
 
     public static LocalDateTime readDateTime(Scanner scanner, String prompt) {
         boolean valid = false;
@@ -953,6 +1026,39 @@ class InputHelper {
         }
 
         return band;
+    }
+
+    public static CityRideDataset.PassengerType readPassengerType(Scanner scanner, String prompt) {
+        boolean valid = false;
+        CityRideDataset.PassengerType type = CityRideDataset.PassengerType.ADULT;
+
+        while (!valid) {
+            System.out.print(prompt);
+            String input = scanner.nextLine().trim().toUpperCase();
+
+            if (input.equals("ADULT")) {
+                type = CityRideDataset.PassengerType.ADULT;
+                valid = true;
+            }
+            else if (input.equals("STUDENT")) {
+                type = CityRideDataset.PassengerType.STUDENT;
+                valid = true;
+            }
+            else if (input.equals("CHILD")) {
+                type = CityRideDataset.PassengerType.CHILD;
+                valid = true;
+            }
+            else if (input.equals("SENIOR") || input.equals("SENIOR CITIZEN")
+                    || input.equals("SENIOR_CITIZEN") || input.equals("SENIORCITIZEN")) {
+                type = CityRideDataset.PassengerType.SENIOR_CITIZEN;
+                valid = true;
+            }
+            else {
+                System.out.println("Invalid passenger type. Allowed: Adult, Student, Child, Senior Citizen.");
+            }
+        }
+
+        return type;
     }
 
     public static RiderProfile.PaymentOption readPaymentOption(Scanner scanner, String prompt) {
