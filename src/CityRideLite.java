@@ -11,6 +11,7 @@ import java.time.format.DateTimeParseException;
 import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.time.LocalDateTime;
 
 public class CityRideLite {
 
@@ -159,7 +160,7 @@ class JourneyManager {
 
 
 
-    public boolean addJourney(LocalDate date, int fromZone, int toZone, CityRideDataset.TimeBand band, CityRideDataset.PassengerType type) {
+    public boolean addJourney(LocalDateTime dateTime, int fromZone, int toZone, CityRideDataset.TimeBand band, CityRideDataset.PassengerType type){
 
         boolean added = false;
 
@@ -169,14 +170,14 @@ class JourneyManager {
 
             BigDecimal discountedFare = calc.discountedFare(fromZone, toZone, band, type);
 
-            BigDecimal runningTotal = getTotalChargedForDay(date, type);
+            BigDecimal runningTotal = getTotalChargedForDay(dateTime.toLocalDate(), type);
 
             BigDecimal chargedFare = calc.applyCap(runningTotal, discountedFare, type);
 
             int id = nextID;
             nextID++;
 
-            Journey newJourney = new Journey(date, id, fromZone, toZone, band, type,
+            Journey newJourney = new Journey(dateTime, id, fromZone, toZone, band, type,
                     baseFare, discountedFare, chargedFare);
 
             journeys.add(newJourney);
@@ -772,7 +773,7 @@ class SummaryReport {
 }
 
 class Journey {
-    private LocalDate date;
+    private LocalDateTime dateTime;
     private int fromZone;
     private int toZone;
     private int zonesCrossed;
@@ -787,24 +788,21 @@ class Journey {
 
     private int id;
 
-    public Journey(LocalDate date, int id, int fromZone, int toZone,
+    public Journey(LocalDateTime dateTime, int id, int fromZone, int toZone,
                    CityRideDataset.TimeBand band,
                    CityRideDataset.PassengerType type,
                    BigDecimal baseFare, BigDecimal discountedFare, BigDecimal chargedFare) {
 
         this.id = id;
-        this.date = date;
+        this.dateTime = dateTime;
         this.fromZone = fromZone;
         this.toZone = toZone;
         this.zonesCrossed = Math.abs(toZone - fromZone) + 1;
-
         this.band = band;
         this.type = type;
-
         this.baseFare = baseFare;
         this.discountedFare = discountedFare;
         this.discountApplied = baseFare.subtract(discountedFare).setScale(2, RoundingMode.HALF_UP);
-
         this.chargedFare = chargedFare;
     }
 
@@ -813,7 +811,11 @@ class Journey {
     }
 
     public LocalDate getDate() {
-        return date;
+        return dateTime.toLocalDate();
+    }
+
+    public LocalDateTime getDateTime() {
+        return dateTime;
     }
 
     public CityRideDataset.PassengerType getType() {
@@ -852,17 +854,8 @@ class Journey {
         return chargedFare;
     }
 
-    public String toString() {
-        return "ID=" + id + " | " + date + " | " + type + " | " + band + " | "
-                + fromZone + "->" + toZone
-                + " | zonesCrossed=" + zonesCrossed
-                + " | base=" + baseFare
-                + " | discount=" + discountApplied
-                + " | discounted=" + discountedFare
-                + " | charged=" + chargedFare;
-    }
-    public void setDate(LocalDate date) {
-        this.date = date;
+    public void setDateTime(LocalDateTime dateTime) {
+        this.dateTime = dateTime;
     }
 
     public void setFromZone(int fromZone) {
@@ -883,8 +876,107 @@ class Journey {
         this.type = type;
     }
 
+    public void setBaseFare(BigDecimal baseFare) {
+        this.baseFare = baseFare;
+    }
+
+    public void setDiscountedFare(BigDecimal discountedFare) {
+        this.discountedFare = discountedFare;
+    }
+
+    public void setDiscountApplied(BigDecimal discountApplied) {
+        this.discountApplied = discountApplied;
+    }
+
     public void setChargedFare(BigDecimal chargedFare) {
         this.chargedFare = chargedFare;
+    }
+
+    public String toString() {
+        return "ID=" + id + " | " + dateTime + " | " + type + " | " + band + " | "
+                + fromZone + "->" + toZone
+                + " | zonesCrossed=" + zonesCrossed
+                + " | base=" + baseFare
+                + " | discount=" + discountApplied
+                + " | discounted=" + discountedFare
+                + " | charged=" + chargedFare;
+    }
+}
+
+
+class InputHelper {
+
+    private static final DateTimeFormatter DATE_TIME_FORMAT =
+            DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm");
+
+    public static LocalDateTime readDateTime(Scanner scanner, String prompt) {
+        boolean valid = false;
+        LocalDateTime dateTime = LocalDateTime.now();
+
+        while (!valid) {
+            System.out.print(prompt);
+            String input = scanner.nextLine().trim();
+
+            if (input.isEmpty()) {
+                System.out.println("Input cannot be blank.");
+            } else {
+                try {
+                    dateTime = LocalDateTime.parse(input, DATE_TIME_FORMAT);
+                    valid = true;
+                } catch (DateTimeParseException e) {
+                    System.out.println("Invalid date and time. Use DD-MM-YYYY HH:mm.");
+                }
+            }
+        }
+
+        return dateTime;
+    }
+
+    public static CityRideDataset.TimeBand readTimeBand(Scanner scanner, String prompt) {
+        boolean valid = false;
+        CityRideDataset.TimeBand band = CityRideDataset.TimeBand.PEAK;
+
+        while (!valid) {
+            System.out.print(prompt);
+            String input = scanner.nextLine().trim().toUpperCase();
+
+            if (input.equals("P") || input.equals("PEAK")) {
+                band = CityRideDataset.TimeBand.PEAK;
+                valid = true;
+            } else if (input.equals("O") || input.equals("OFF-PEAK")
+                    || input.equals("OFF_PEAK") || input.equals("OFFPEAK")) {
+                band = CityRideDataset.TimeBand.OFF_PEAK;
+                valid = true;
+            } else {
+                System.out.println("Invalid time band. Enter PEAK or OFF-PEAK.");
+            }
+        }
+
+        return band;
+    }
+
+    public static RiderProfile.PaymentOption readPaymentOption(Scanner scanner, String prompt) {
+        boolean valid = false;
+        RiderProfile.PaymentOption paymentOption = RiderProfile.PaymentOption.CARD;
+
+        while (!valid) {
+            System.out.print(prompt);
+            String input = scanner.nextLine().trim().toUpperCase();
+
+            if (input.equals("CARD")) {
+                paymentOption = RiderProfile.PaymentOption.CARD;
+                valid = true;
+            }
+            else if (input.equals("CASH")) {
+                paymentOption = RiderProfile.PaymentOption.CASH;
+                valid = true;
+            }
+            else {
+                System.out.println("Invalid payment option. Enter CARD or CASH.");
+            }
+        }
+
+        return paymentOption;
     }
 }
 
