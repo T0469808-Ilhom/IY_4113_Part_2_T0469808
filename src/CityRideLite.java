@@ -44,49 +44,49 @@ public class CityRideLite {
 
 class FareCalculator {
 
-    public BigDecimal discountedFare(int fromZone, int toZone,
+    public BigDecimal discountedFare(SystemConfig config, int fromZone, int toZone,
                                      CityRideDataset.TimeBand band,
                                      CityRideDataset.PassengerType type) {
 
         BigDecimal result = new BigDecimal("0.00");
 
-        BigDecimal baseFare = CityRideDataset.getBaseFare(fromZone, toZone, band);
+        BigDecimal baseFare = config.getBaseFare(fromZone, toZone, band);
 
         if (baseFare != null) {
+            BigDecimal discountRate = config.getDiscount(type);
 
-            BigDecimal discountRate = CityRideDataset.DISCOUNT_RATE.get(type);
-            BigDecimal discountAmount = baseFare.multiply(discountRate);
-            BigDecimal discounted = baseFare.subtract(discountAmount);
-
-            result = money(discounted);
-        }
-
-        return result;
-    }
-
-    public BigDecimal applyCap(BigDecimal runningTotal, BigDecimal discountedFare,
-                               CityRideDataset.PassengerType type) {
-
-        BigDecimal result;
-
-        BigDecimal cap = CityRideDataset.DAILY_CAP.get(type);
-
-        if (runningTotal.compareTo(cap) >= 0) {
-            result = money("0.00");
-        } else {
-
-            BigDecimal remaining = cap.subtract(runningTotal);
-
-            if (discountedFare.compareTo(remaining) > 0) {
-                result = money(remaining);
-            } else {
-                result = money(discountedFare);
+            if (discountRate != null) {
+                BigDecimal discountAmount = baseFare.multiply(discountRate);
+                BigDecimal discounted = baseFare.subtract(discountAmount);
+                result = money(discounted);
             }
         }
 
         return result;
     }
 
+    public BigDecimal applyCap(SystemConfig config, BigDecimal runningTotal, BigDecimal discountedFare,
+                               CityRideDataset.PassengerType type) {
+
+        BigDecimal result = new BigDecimal("0.00");
+        BigDecimal cap = config.getDailyCap(type);
+
+        if (cap != null) {
+            if (runningTotal.compareTo(cap) >= 0) {
+                result = money("0.00");
+            } else {
+                BigDecimal remaining = cap.subtract(runningTotal);
+
+                if (discountedFare.compareTo(remaining) > 0) {
+                    result = money(remaining);
+                } else {
+                    result = money(discountedFare);
+                }
+            }
+        }
+
+        return result;
+    }
 
     private BigDecimal money(BigDecimal value) {
         return value.setScale(2, RoundingMode.HALF_UP);
@@ -102,7 +102,6 @@ class JourneyManager {
 
     private List<Journey> journeys;
     private FareCalculator calc;
-
     private int nextID;
 
     public JourneyManager() {
@@ -112,12 +111,10 @@ class JourneyManager {
     }
 
     public Journey findJourneyById(int id) {
-
         Journey foundJourney = null;
 
         int i = 0;
         while (i < journeys.size() && foundJourney == null) {
-
             Journey currentJourney = journeys.get(i);
 
             if (currentJourney.getId() == id) {
@@ -130,49 +127,51 @@ class JourneyManager {
         return foundJourney;
     }
 
-    private List<Journey> getJourneysForDate(LocalDate date) {
+    private List<Journey> getJourneysForDateAndType(LocalDate date, CityRideDataset.PassengerType type) {
         List<Journey> result = new ArrayList<>();
 
         int i = 0;
         while (i < journeys.size()) {
-            if (journeys.get(i).getDate().equals(date)) {
-                result.add(journeys.get(i));
+            Journey j = journeys.get(i);
+
+            if (j.getDate().equals(date) && j.getType() == type) {
+                result.add(j);
             }
+
             i++;
         }
 
         return result;
     }
 
-    public void recalculateChargedFaresForDay(LocalDate date) {
-        List<Journey> dayJourneys = getJourneysForDate(date);
+    public void recalculateChargedFaresForDay(LocalDate date, CityRideDataset.PassengerType type, SystemConfig config) {
+        List<Journey> dayJourneys = getJourneysForDateAndType(date, type);
         BigDecimal runningTotal = new BigDecimal("0.00");
 
         int i = 0;
         while (i < dayJourneys.size()) {
             Journey j = dayJourneys.get(i);
-            BigDecimal newCharged = calc.applyCap(runningTotal, j.getDiscountedFare(), j.getType());
+
+            BigDecimal newCharged = calc.applyCap(config, runningTotal, j.getDiscountedFare(), j.getType());
             j.setChargedFare(newCharged);
             runningTotal = runningTotal.add(newCharged);
+
             i++;
         }
     }
 
-
-
-    public boolean addJourney(LocalDateTime dateTime, int fromZone, int toZone, CityRideDataset.TimeBand band, CityRideDataset.PassengerType type){
+    public boolean addJourney(LocalDateTime dateTime, int fromZone, int toZone,
+                              CityRideDataset.TimeBand band, CityRideDataset.PassengerType type,
+                              SystemConfig config) {
 
         boolean added = false;
 
-        BigDecimal baseFare = CityRideDataset.getBaseFare(fromZone, toZone, band);
+        BigDecimal baseFare = config.getBaseFare(fromZone, toZone, band);
 
         if (baseFare != null) {
-
-            BigDecimal discountedFare = calc.discountedFare(fromZone, toZone, band, type);
-
+            BigDecimal discountedFare = calc.discountedFare(config, fromZone, toZone, band, type);
             BigDecimal runningTotal = getTotalChargedForDay(dateTime.toLocalDate(), type);
-
-            BigDecimal chargedFare = calc.applyCap(runningTotal, discountedFare, type);
+            BigDecimal chargedFare = calc.applyCap(config, runningTotal, discountedFare, type);
 
             int id = nextID;
             nextID++;
@@ -181,30 +180,33 @@ class JourneyManager {
                     baseFare, discountedFare, chargedFare);
 
             journeys.add(newJourney);
-
             added = true;
         }
-
 
         return added;
     }
 
-    public boolean removeJourneyById(int id) {
-        // Removing the journey by id not by index as I did before.
-
+    public boolean removeJourneyById(int id, SystemConfig config) {
         boolean removed = false;
+        LocalDate removedDate = null;
+        CityRideDataset.PassengerType removedType = null;
 
         int i = 0;
         while (i < journeys.size() && !removed) {
-
             Journey j = journeys.get(i);
 
             if (j.getId() == id) {
+                removedDate = j.getDate();
+                removedType = j.getType();
                 journeys.remove(i);
                 removed = true;
             } else {
                 i++;
             }
+        }
+
+        if (removed) {
+            recalculateChargedFaresForDay(removedDate, removedType, config);
         }
 
         return removed;
@@ -214,14 +216,11 @@ class JourneyManager {
         return journeys;
     }
 
-
     public BigDecimal getTotalChargedForDay(LocalDate date, CityRideDataset.PassengerType type) {
-
         BigDecimal total = new BigDecimal("0.00");
 
         int i = 0;
         while (i < journeys.size()) {
-
             Journey j = journeys.get(i);
 
             if (j.getDate().equals(date)) {
