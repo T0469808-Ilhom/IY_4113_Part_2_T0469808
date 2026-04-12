@@ -2,7 +2,6 @@ import java.util.Scanner;
 import java.util.ArrayList;
 import java.util.List;
 import java.time.LocalDate;
-
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.HashMap;
@@ -29,7 +28,6 @@ public class CityRideLite {
     private static void openRiderFlow(Scanner sc,
                                       JourneyManager manager,
                                       SummaryReport summaryReport,
-                                      //RiderMenu riderMenu,
                                       ProfileManager profileManager,
                                       ReportExporter reportExporter,
                                       CsvFileHandler csvFileHandler,
@@ -56,9 +54,7 @@ class FareCalculator {
         if (baseFare != null) {
 
             BigDecimal discountRate = CityRideDataset.DISCOUNT_RATE.get(type);
-
             BigDecimal discountAmount = baseFare.multiply(discountRate);
-
             BigDecimal discounted = baseFare.subtract(discountAmount);
 
             result = money(discounted);
@@ -73,7 +69,6 @@ class FareCalculator {
         BigDecimal result;
 
         BigDecimal cap = CityRideDataset.DAILY_CAP.get(type);
-
 
         if (runningTotal.compareTo(cap) >= 0) {
             result = money("0.00");
@@ -163,7 +158,7 @@ class JourneyManager {
     }
 
 
-    // return true if journey was added, false if not added
+
     public boolean addJourney(LocalDate date, int fromZone, int toZone, CityRideDataset.TimeBand band, CityRideDataset.PassengerType type) {
 
         boolean added = false;
@@ -178,11 +173,11 @@ class JourneyManager {
 
             BigDecimal chargedFare = calc.applyCap(runningTotal, discountedFare, type);
 
-            int id = nextID; //generating a unique id for every journey here!
+            int id = nextID;
             nextID++;
 
             Journey newJourney = new Journey(date, id, fromZone, toZone, band, type,
-                    baseFare, discountedFare, chargedFare); //adding the generated id to the journey
+                    baseFare, discountedFare, chargedFare);
 
             journeys.add(newJourney);
 
@@ -382,7 +377,7 @@ class RiderMenu {
                                        JsonFileHandler jsonFileHandler) {
     }
 }
-//commit
+
 class ConfigManager {
 
     private SystemConfig currentConfig;
@@ -562,7 +557,6 @@ class ReportExporter {
             writer.write("Rider: " + riderName);
             writer.newLine();
             writer.newLine();
-            writer.write(summaryReport.buildSummaryText(manager, date));
             writer.close();
 
             success = true;
@@ -600,181 +594,180 @@ class AdminMenu {
     }
 }
 
+
+/*
+ * SummaryReport builds and displays the end-of-day summary.
+ * It loops through journeys for a given date and calculates
+ * totals, averages, savings, and zone counts.
+ */
 class SummaryReport {
 
-    public void printSummary(JourneyManager manager, LocalDate date) {
-
-        List<Journey> list = manager.getJourneys();
-
+    // Holds all calculated values for one day's summary
+    private class SummaryData {
         int totalJourneys = 0;
-        BigDecimal totalCharged = new BigDecimal("0.00");
-
         int mostExpensiveId = -1;
-        BigDecimal mostExpensiveFare = new BigDecimal("0.00");
-
         int peakCount = 0;
         int offPeakCount = 0;
+        int[][] zonePairCounts = new int[CityRideDataset.MAX_ZONE + 1][CityRideDataset.MAX_ZONE + 1];
+        int[] zoneCounts = new int[CityRideDataset.MAX_ZONE + 1];
+        BigDecimal average = BigDecimal.ZERO;
+        BigDecimal savings = BigDecimal.ZERO;
+        BigDecimal totalCharged = BigDecimal.ZERO;
+        BigDecimal mostExpensiveFare = BigDecimal.ZERO;
+    }
 
-        int[][] zonePairCounts = new int[6][6]; // 1..5 used
+
+
+
+    // Loops through journeys and fills in all summary values for the given date
+    private SummaryData calculateSummaryData(JourneyManager manager, LocalDate date) {
+        SummaryData data = new SummaryData();
+        List<Journey> list = manager.getJourneys();
 
         int i = 0;
         while (i < list.size()) {
-
             Journey j = list.get(i);
 
             if (j.getDate().equals(date)) {
+                data.totalJourneys++;
+                data.totalCharged = data.totalCharged.add(j.getChargedFare());
 
-                totalJourneys++;
-
-                BigDecimal charged = j.getChargedFare();
-                totalCharged = totalCharged.add(charged);
-
-                if (mostExpensiveId == -1 || charged.compareTo(mostExpensiveFare) > 0) {
-                    mostExpensiveFare = charged;
-                    mostExpensiveId = j.getId();
+                if (data.mostExpensiveId == -1 || j.getChargedFare().compareTo(data.mostExpensiveFare) > 0) {
+                    data.mostExpensiveFare = j.getChargedFare();
+                    data.mostExpensiveId = j.getId();
                 }
 
                 if (j.getBand() == CityRideDataset.TimeBand.PEAK) {
-                    peakCount++;
-                } else {
-                    offPeakCount++;
+                    data.peakCount++;
+                }
+                else {
+                    data.offPeakCount++;
                 }
 
-                int from = j.getFromZone();
-                int to = j.getToZone();
-                if (from >= 1 && from <= 5 && to >= 1 && to <= 5) {
-                    zonePairCounts[from][to] = zonePairCounts[from][to] + 1;
+                int fromZone = j.getFromZone();
+                int toZone = j.getToZone();
+
+                if (isValidZone(fromZone) && isValidZone(toZone)) {
+                    data.zonePairCounts[fromZone][toZone]++;
+                    data.zoneCounts[fromZone]++;
+                    if (fromZone != toZone) {
+                        data.zoneCounts[toZone]++;
+                    }
                 }
             }
 
             i++;
         }
 
-        System.out.println("\n Daily Summary (" + date + ")");
-        System.out.println("Total number of journeys: " + totalJourneys);
-        System.out.println("Total cost charged: " + totalCharged.setScale(2, RoundingMode.HALF_UP));
-
-        BigDecimal average = new BigDecimal("0.00");
-        if (totalJourneys > 0) {
-            average = totalCharged.divide(new BigDecimal(totalJourneys), 2, RoundingMode.HALF_UP);
+        if (data.totalJourneys > 0) {
+            data.average = data.totalCharged.divide(new BigDecimal(data.totalJourneys), 2, RoundingMode.HALF_UP);
         }
-        System.out.println("Average cost per journey: " + average);
 
-        if (mostExpensiveId == -1) {
-            System.out.println("Most expensive journey: ");
+        data.savings = calculateSavings(manager, date);
+        return data;
+    }
+
+
+
+    // Prints the daily summary to the console
+    public void printSummary(JourneyManager manager, LocalDate date) {
+        SummaryData data = calculateSummaryData(manager, date);
+        String capReached = data.savings.compareTo(BigDecimal.ZERO) > 0 ? "Yes" : "No";
+
+        System.out.println("=== CityRide Lite Daily Summary ===");
+        System.out.println("Date: " + date);
+        System.out.println("Total journeys: " + data.totalJourneys);
+        System.out.println("Total charged: GBP " + money(data.totalCharged));
+        System.out.println("Average cost per journey: GBP " + money(data.average));
+
+        if (data.mostExpensiveId == -1) {
+            System.out.println("Most expensive journey: none");
         } else {
-            System.out.println("Most expensive journey: ID=" + mostExpensiveId + " | charged=" +
-                    mostExpensiveFare.setScale(2, RoundingMode.HALF_UP));
+            System.out.println("Most expensive journey: ID " + data.mostExpensiveId
+                    + " (GBP " + money(data.mostExpensiveFare) + ")");
         }
 
-        System.out.println("\n--- Category Counts (" + date + ") ---");
-        System.out.println("Peak journeys: " + peakCount);
-        System.out.println("Off-peak journeys: " + offPeakCount);
+        System.out.println("Savings from cap: GBP " + money(data.savings));
+        System.out.println("Cap reached: " + capReached);
+        System.out.println("Peak journeys: " + data.peakCount);
+        System.out.println("Off-peak journeys: " + data.offPeakCount);
 
+        printZonePairCounts(data.zonePairCounts);
+        printZoneCounts(data.zoneCounts);
+    }
+
+    // Calculates total savings from cap for a given date
+    // Saving per journey = discounted fare minus what was actually charged
+    private BigDecimal calculateSavings(JourneyManager manager, LocalDate date) {
+        BigDecimal savings = BigDecimal.ZERO;
+        List<Journey> list = manager.getJourneys();
+
+        int i = 0;
+        while (i < list.size()) {
+            Journey j = list.get(i);
+            if (j.getDate().equals(date)) {
+                savings = savings.add(j.getDiscountedFare().subtract(j.getChargedFare()));
+            }
+            i++;
+        }
+
+        return money(savings);
+    }
+
+    // Prints zone pair counts to the console
+    private void printZonePairCounts(int[][] zonePairCounts) {
         System.out.println("\nZone pair counts:");
-        int from = 1;
-        while (from <= 5) {
-            int to = 1;
-            while (to <= 5) {
-                int c = zonePairCounts[from][to];
-                if (c > 0) {
-                    System.out.println(from + "->" + to + ": " + c);
+        boolean hasAny = false;
+
+        int from = CityRideDataset.MIN_ZONE;
+        while (from <= CityRideDataset.MAX_ZONE) {
+            int to = CityRideDataset.MIN_ZONE;
+            while (to <= CityRideDataset.MAX_ZONE) {
+                if (zonePairCounts[from][to] > 0) {
+                    System.out.println(from + "->" + to + ": " + zonePairCounts[from][to]);
+                    hasAny = true;
                 }
                 to++;
             }
             from++;
         }
+
+        if (!hasAny) {
+            System.out.println("none");
+        }
     }
 
-    public BigDecimal calculateSavings(JourneyManager manager, LocalDate date) {
+    // Prints zone involvement counts to the console
+    private void printZoneCounts(int[] zoneCounts) {
+        System.out.println("\nZone counts:");
+        boolean hasAny = false;
 
-        BigDecimal savings = new BigDecimal("0.00");
-
-        List<Journey> list = manager.getJourneys();
-
-        int i = 0;
-        while (i < list.size()) {
-
-            Journey currentJourney = list.get(i);
-
-            if (currentJourney.getDate().equals(date)) {
-
-                BigDecimal discountedFare = currentJourney.getDiscountedFare();
-                BigDecimal chargedFare = currentJourney.getChargedFare();
-
-                BigDecimal journeySaving = discountedFare.subtract(chargedFare);
-                savings = savings.add(journeySaving);
+        int zone = CityRideDataset.MIN_ZONE;
+        while (zone <= CityRideDataset.MAX_ZONE) {
+            if (zoneCounts[zone] > 0) {
+                System.out.println("Zone " + zone + ": " + zoneCounts[zone]);
+                hasAny = true;
             }
-
-            i++;
+            zone++;
         }
 
-        return savings.setScale(2, RoundingMode.HALF_UP);
+        if (!hasAny) {
+            System.out.println("none");
+        }
     }
 
-    public String buildSummaryText(JourneyManager manager, LocalDate date) {
-
-        List<Journey> list = manager.getJourneys();
-
-        int totalJourneys = 0;
-        BigDecimal totalCharged = new BigDecimal("0.00");
-        int mostExpensiveId = -1;
-        BigDecimal mostExpensiveFare = new BigDecimal("0.00");
-        int peakCount = 0;
-        int offPeakCount = 0;
-
-        int i = 0;
-        while (i < list.size()) {
-
-            Journey currentJourney = list.get(i);
-
-            if (currentJourney.getDate().equals(date)) {
-
-                totalJourneys++;
-                totalCharged = totalCharged.add(currentJourney.getChargedFare());
-
-                if (mostExpensiveId == -1 ||
-                        currentJourney.getChargedFare().compareTo(mostExpensiveFare) > 0) {
-                    mostExpensiveFare = currentJourney.getChargedFare();
-                    mostExpensiveId = currentJourney.getId();
-                }
-
-                if (currentJourney.getBand() == CityRideDataset.TimeBand.PEAK) {
-                    peakCount++;
-                } else {
-                    offPeakCount++;
-                }
-            }
-
-            i++;
+    // Checks if a zone number is within the valid dataset range
+    private boolean isValidZone(int zone) {
+        boolean valid = false;
+        if (zone >= CityRideDataset.MIN_ZONE && zone <= CityRideDataset.MAX_ZONE) {
+            valid = true;
         }
+        return valid;
+    }
 
-        BigDecimal average = new BigDecimal("0.00");
-        if (totalJourneys > 0) {
-            average = totalCharged.divide(new BigDecimal(totalJourneys), 2, RoundingMode.HALF_UP);
-        }
-
-        BigDecimal savings = calculateSavings(manager, date);
-
-        String text = "";
-        text = text + "CityRide Lite Daily Summary\n";
-        text = text + "Date: " + date + "\n";
-        text = text + "Total journeys: " + totalJourneys + "\n";
-        text = text + "Total charged: " + totalCharged.setScale(2, RoundingMode.HALF_UP) + "\n";
-        text = text + "Average cost per journey: " + average + "\n";
-
-        if (mostExpensiveId == -1) {
-            text = text + "Most expensive journey: none\n";
-        } else {
-            text = text + "Most expensive journey: ID=" + mostExpensiveId +
-                    " | charged=" + mostExpensiveFare.setScale(2, RoundingMode.HALF_UP) + "\n";
-        }
-
-        text = text + "Savings from cap: " + savings + "\n";
-        text = text + "Peak journeys: " + peakCount + "\n";
-        text = text + "Off-peak journeys: " + offPeakCount + "\n";
-
-        return text;
+    // Rounds a money value to 2 decimal places for consistent display
+    private BigDecimal money(BigDecimal value) {
+        return value.setScale(2, RoundingMode.HALF_UP);
     }
 }
 
