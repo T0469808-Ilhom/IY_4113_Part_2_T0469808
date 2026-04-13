@@ -512,26 +512,28 @@ class JsonFileHandler {
         return profile;
     }
 
-    private RiderProfile parseProfile(BufferedReader reader) throws IOException {
+    private RiderProfile parseProfile(BufferedReader reader) {
         String name = "";
         CityRideDataset.PassengerType passengerType = CityRideDataset.PassengerType.ADULT;
         RiderProfile.PaymentOption paymentOption = RiderProfile.PaymentOption.CARD;
 
-        String line = reader.readLine();
-        while (line != null) {
-            line = line.trim();
+        try {
+            String line = reader.readLine();
+            while (line != null) {
+                line = line.trim();
 
-            if (line.contains("name")) {
-                name = extractValue(line);
-            }
-            else if (line.contains("passengerType")) {
-                passengerType = CityRideDataset.PassengerType.valueOf(extractValue(line));
-            }
-            else if (line.contains("defaultPaymentOption")) {
-                paymentOption = RiderProfile.PaymentOption.valueOf(extractValue(line));
-            }
+                if (line.contains("name")) {
+                    name = extractValue(line);
+                } else if (line.contains("passengerType")) {
+                    passengerType = CityRideDataset.PassengerType.valueOf(extractValue(line));
+                } else if (line.contains("defaultPaymentOption")) {
+                    paymentOption = RiderProfile.PaymentOption.valueOf(extractValue(line));
+                }
 
-            line = reader.readLine();
+                line = reader.readLine();
+            }
+        } catch (IOException ex) {
+            System.out.println("ERROR: Could not read profile data.");
         }
 
         RiderProfile profile = null;
@@ -543,12 +545,158 @@ class JsonFileHandler {
         return profile;
     }
 
+
     public boolean saveConfig(String filePath, SystemConfig config) {
-        return false;
+        boolean success = false;
+
+        if (config == null) {
+            System.out.println("ERROR: No config to save.");
+        } else {
+            try {
+                BufferedWriter writer = new BufferedWriter(new FileWriter(filePath));
+                writer.write("{");
+                writer.newLine();
+                writer.write("  \"peakStart\": \"" + config.getPeakStart() + "\",");
+                writer.newLine();
+                writer.write("  \"peakEnd\": \"" + config.getPeakEnd() + "\",");
+                writer.newLine();
+                writeDiscounts(writer, config);
+                writeCaps(writer, config);
+                writeBaseFares(writer, config);
+                writer.write("}");
+                writer.close();
+                success = true;
+            }
+            catch (IOException ex) {
+                System.out.println("ERROR: Could not save config to " + filePath);
+            }
+        }
+
+        return success;
     }
 
     public SystemConfig loadConfig(String filePath) {
-        return null;
+        SystemConfig config = null;
+
+        try {
+            BufferedReader reader = new BufferedReader(new FileReader(filePath));
+            config = parseConfig(reader);
+            reader.close();
+        }
+        catch (IOException ex) {
+            System.out.println("ERROR: Could not load config from " + filePath);
+        }
+
+        return config;
+    }
+
+    private void writeDiscounts(BufferedWriter writer, SystemConfig config) {
+        CityRideDataset.PassengerType[] types = CityRideDataset.PassengerType.values();
+        int i = 0;
+        try {
+            while (i < types.length) {
+                writer.write("  \"discount_" + types[i].name() + "\": \"" + config.getDiscount(types[i]) + "\",");
+                writer.newLine();
+                i++;
+            }
+        }
+        catch (IOException ex) {
+            System.out.println("ERROR: Could not write discounts.");
+        }
+    }
+
+    private void writeCaps(BufferedWriter writer, SystemConfig config) {
+        CityRideDataset.PassengerType[] types = CityRideDataset.PassengerType.values();
+        int i = 0;
+        try {
+            while (i < types.length) {
+                writer.write("  \"cap_" + types[i].name() + "\": \"" + config.getDailyCap(types[i]) + "\",");
+                writer.newLine();
+                i++;
+            }
+        }
+        catch (IOException ex) {
+            System.out.println("ERROR: Could not write caps.");
+        }
+    }
+
+    private void writeBaseFares(BufferedWriter writer, SystemConfig config) {
+        int from = CityRideDataset.MIN_ZONE;
+        while (from <= CityRideDataset.MAX_ZONE) {
+            writeBaseFaresForZone(writer, config, from);
+            from++;
+        }
+    }
+
+    private void writeBaseFaresForZone(BufferedWriter writer, SystemConfig config, int from) {
+        int to = CityRideDataset.MIN_ZONE;
+        try {
+            while (to <= CityRideDataset.MAX_ZONE) {
+                BigDecimal peak = config.getBaseFare(from, to, CityRideDataset.TimeBand.PEAK);
+                BigDecimal offPeak = config.getBaseFare(from, to, CityRideDataset.TimeBand.OFF_PEAK);
+                writer.write("  \"fare_" + from + "_" + to + "_PEAK\": \"" + peak + "\",");
+                writer.newLine();
+                writer.write("  \"fare_" + from + "_" + to + "_OFF_PEAK\": \"" + offPeak + "\",");
+                writer.newLine();
+                to++;
+            }
+        } catch (IOException ex) {
+            System.out.println("ERROR: Could not write base fares.");
+        }
+    }
+
+    private SystemConfig parseConfig(BufferedReader reader) {
+        SystemConfig config = new SystemConfig();
+
+        try {
+            String line = reader.readLine();
+            while (line != null) {
+                line = line.trim();
+
+                if (line.contains("peakStart")) {
+                    config.setPeakWindow(extractValue(line), config.getPeakEnd());
+                }
+                else if (line.contains("peakEnd")) {
+                    config.setPeakWindow(config.getPeakStart(), extractValue(line));
+                }
+                else if (line.contains("discount_")) {
+                    parseDiscount(line, config);
+                }
+                else if (line.contains("cap_")) {
+                    parseCap(line, config);
+                }
+                else if (line.contains("fare_")) {
+                    parseFare(line, config);
+                }
+
+                line = reader.readLine();
+            }
+        } catch (IOException ex) {
+            System.out.println("ERROR: Could not read config data.");
+        }
+
+        return config;
+    }
+
+    private void parseDiscount(String line, SystemConfig config) {
+        String[] parts = line.split("\"");
+        String typeName = parts[1].replace("discount_", "");
+        config.setDiscount(CityRideDataset.PassengerType.valueOf(typeName), new BigDecimal(extractValue(line)));
+    }
+
+    private void parseCap(String line, SystemConfig config) {
+        String[] parts = line.split("\"");
+        String typeName = parts[1].replace("cap_", "");
+        config.setDailyCap(CityRideDataset.PassengerType.valueOf(typeName), new BigDecimal(extractValue(line)));
+    }
+
+    private void parseFare(String line, SystemConfig config) {
+        String[] parts = line.split("\"");
+        String[] keyParts = parts[1].replace("fare_", "").split("_", 3);
+        int from = Integer.parseInt(keyParts[0]);
+        int to = Integer.parseInt(keyParts[1]);
+        CityRideDataset.TimeBand band = CityRideDataset.TimeBand.valueOf(keyParts[2]);
+        config.setBaseFare(from, to, band, new BigDecimal(extractValue(line)));
     }
 
     private String extractValue(String line) {
@@ -557,7 +705,7 @@ class JsonFileHandler {
         }
 
         String[] parts = line.split("\"");
-        return parts[parts.length - 1];
+        return parts[parts.length - 2];
     }
 }
 
@@ -587,10 +735,12 @@ class SystemConfig {
     }
 
     public BigDecimal getDiscount(CityRideDataset.PassengerType type) {
+
         return discounts.get(type);
     }
 
     public void setDiscount(CityRideDataset.PassengerType type, BigDecimal discount) {
+
         discounts.put(type, discount);
     }
 
@@ -599,14 +749,17 @@ class SystemConfig {
     }
 
     public void setDailyCap(CityRideDataset.PassengerType type, BigDecimal cap) {
+
         dailyCaps.put(type, cap);
     }
 
     public String getPeakStart() {
+
         return peakStart;
     }
 
     public String getPeakEnd() {
+
         return peakEnd;
     }
 
