@@ -374,15 +374,14 @@ class RiderMenu {
 
         if (profileManager.hasCurrentProfile()) {
 
-            journeyMenuUI(sc, manager, summaryReport, profileManager, reportExporter, csvFileHandler, jsonFileHandler, configManager);
+            journeyMenuUI(sc, manager, summaryReport, profileManager, reportExporter, csvFileHandler, configManager);
 
-            saveAndExitUI(sc, profileManager, manager, jsonFileHandler, csvFileHandler);
+            saveProfileBeforeExitUI(sc, profileManager, jsonFileHandler);
+            saveJourneysBeforeExitUI(sc, manager, csvFileHandler);
         }
     }
 
-
-    private void profileSetupUI(Scanner sc, ProfileManager profileManager,
-                                JsonFileHandler jsonFileHandler) {
+    private void profileSetupUI(Scanner sc, ProfileManager profileManager, JsonFileHandler jsonFileHandler) {
         int choice;
 
         do {
@@ -430,52 +429,281 @@ class RiderMenu {
         }
     }
 
-    private void saveAndExitUI(Scanner sc, ProfileManager profileManager,
-                               JourneyManager manager, JsonFileHandler jsonFileHandler,
-                               CsvFileHandler csvFileHandler) {
-    }
-
     private void journeyMenuUI(Scanner sc, JourneyManager manager, SummaryReport summaryReport,
                                ProfileManager profileManager, ReportExporter reportExporter,
-                               CsvFileHandler csvFileHandler, JsonFileHandler jsonFileHandler,
-                               ConfigManager configManager) {
+                               CsvFileHandler csvFileHandler, ConfigManager configManager) {
+        int choice;
+
+        do {
+            String name = profileManager.getCurrentProfile().getName();
+            System.out.println("\n=== Journey Menu ===");
+            System.out.println("Welcome, " + name + "!");
+            System.out.println("1. Add journey");
+            System.out.println("2. Edit journey");
+            System.out.println("3. Delete journey");
+            System.out.println("4. List journeys");
+            System.out.println("5. View running totals");
+            System.out.println("6. Summary and Reports");
+            System.out.println("0. Exit");
+
+            choice = InputHelper.readIntInRange(sc, "Choose an option (0-6): ", 0, 6);
+
+            switch (choice) {
+                case 1:
+                    addJourneyUI(sc, manager, profileManager, configManager);
+                    break;
+                case 2:
+                    editJourneyUI(sc, manager, configManager);
+                    break;
+                case 3:
+                    deleteJourneyUI(sc, manager, configManager);
+                    break;
+                case 4:
+                    listJourneysUI(manager);
+                    break;
+                case 5:
+                    showRunningTotalsUI(manager, profileManager, configManager);
+                    break;
+                case 6:
+                    summaryAndReportsMenuUI(sc, manager, summaryReport, profileManager, reportExporter, csvFileHandler);
+                    break;
+            }
+
+        } while (choice != 0);
     }
 
+    private void addJourneyUI(Scanner sc, JourneyManager manager, ProfileManager profileManager, ConfigManager configManager) {
+        System.out.println("\n=== Add Journey ===");
+        LocalDateTime dateTime = InputHelper.readDateTime(sc, "Enter date and time (DD-MM-YYYY HH:mm, e.g. 22-04-2026 08:30): ");
+        int fromZone = InputHelper.readIntInRange(sc, "Enter from zone (1-5): ", 1, 5);
+        int toZone = InputHelper.readIntInRange(sc, "Enter to zone (1-5): ", 1, 5);
+        CityRideDataset.TimeBand band = InputHelper.readTimeBand(sc, "Enter time band (PEAK/OFF-PEAK): ");
+        CityRideDataset.PassengerType type = profileManager.getCurrentProfile().getPassengerType();
+        boolean added = manager.addJourney(dateTime, fromZone, toZone, band, type, configManager.getCurrentConfig());
 
-    private void saveProfileUI(ProfileManager profileManager, JsonFileHandler jsonFileHandler) {
+        if (added) {
+            System.out.println("Journey added successfully.");
+        }
+        else {
+            System.out.println("ERROR: Could not add journey. Please check zone values.");
+        }
     }
 
-    private void addJourneyUI(Scanner sc, JourneyManager manager, ProfileManager profileManager) {
+    private void editJourneyUI(Scanner sc, JourneyManager manager, ConfigManager configManager) {
+        System.out.println("\n=== Edit Journey ===");
+
+        if (manager.getJourneys().isEmpty()) {
+            System.out.println("No journeys to edit.");
+        }
+        else {
+            listJourneysUI(manager);
+            int id = InputHelper.readIntInRange(sc, "Enter journey ID to edit: ", 1, 999);
+            Journey j = manager.findJourneyById(id);
+
+            if (j == null) {
+                System.out.println("ERROR: No journey found with ID=" + id);
+            }
+            else {
+                j.setDateTime(InputHelper.readDateTime(sc, "Enter new date and time (DD-MM-YYYY HH:mm): "));
+                j.setFromZone(InputHelper.readIntInRange(sc, "Enter new from zone (1-5): ", 1, 5));
+                j.setToZone(InputHelper.readIntInRange(sc, "Enter new to zone (1-5): ", 1, 5));
+                j.setBand(InputHelper.readTimeBand(sc, "Enter new time band (PEAK/OFF-PEAK): "));
+                manager.recalculateChargedFaresForDay(j.getDate(), j.getType(), configManager.getCurrentConfig());
+                System.out.println("Journey updated successfully.");
+            }
+        }
     }
 
-    private void editJourneyUI(Scanner sc, JourneyManager manager, ProfileManager profileManager) {
-    }
+    private void deleteJourneyUI(Scanner sc, JourneyManager manager, ConfigManager configManager) {
+        System.out.println("\n=== Delete Journey ===");
 
-    private void deleteJourneyUI(Scanner sc, JourneyManager manager) {
+        if (manager.getJourneys().isEmpty()) {
+            System.out.println("No journeys to delete.");
+        }
+        else {
+            listJourneysUI(manager);
+            int id = InputHelper.readIntInRange(sc, "Enter journey ID to delete: ", 1, 999);
+            boolean confirm = InputHelper.readYesNo(sc, "Confirm delete journey ID=" + id + "? (Y/N): ");
+
+            if (confirm) {
+                boolean removed = manager.removeJourneyById(id, configManager.getCurrentConfig());
+                if (removed) {
+                    System.out.println("Journey deleted and fares recalculated.");
+                }
+                else {
+                    System.out.println("ERROR: No journey found with ID=" + id);
+                }
+            }
+            else {
+                System.out.println("Deletion cancelled.");
+            }
+        }
     }
 
     private void listJourneysUI(JourneyManager manager) {
+        System.out.println("\n=== Journey List ===");
+
+        if (manager.getJourneys().isEmpty()) {
+            System.out.println("No journeys recorded.");
+        }
+        else {
+            int i = 0;
+            while (i < manager.getJourneys().size()) {
+                System.out.println(manager.getJourneys().get(i));
+                i++;
+            }
+        }
+    }
+
+    private void showRunningTotalsUI(JourneyManager manager, ProfileManager profileManager, ConfigManager configManager) {
+        System.out.println("\n=== Running Totals ===");
+
+        if (manager.getJourneys().isEmpty()) {
+            System.out.println("No journeys recorded yet.");
+        } else {
+            CityRideDataset.PassengerType type = profileManager.getCurrentProfile().getPassengerType();
+            LocalDate today = LocalDate.now();
+            BigDecimal total = manager.getTotalChargedForDay(today, type);
+            BigDecimal cap = configManager.getCurrentConfig().getDailyCap(type);
+
+            System.out.println("Passenger type: " + type);
+            System.out.println("Total charged today: GBP " + total.setScale(2, RoundingMode.HALF_UP));
+            System.out.println("Daily cap: GBP " + cap.setScale(2, RoundingMode.HALF_UP));
+
+            if (total.compareTo(cap) >= 0) {
+                System.out.println("Cap reached: Yes");
+            }
+            else {
+                System.out.println("Cap reached: No");
+            }
+        }
+    }
+
+    private void summaryAndReportsMenuUI(Scanner sc, JourneyManager manager, SummaryReport summaryReport,
+                                         ProfileManager profileManager, ReportExporter reportExporter, CsvFileHandler csvFileHandler) {
+        int choice;
+
+        do {
+            System.out.println("\n=== Summary and Reports ===");
+            System.out.println("1. Show daily summary");
+            System.out.println("2. Import journeys from CSV");
+            System.out.println("3. Export journeys to CSV");
+            System.out.println("4. Export summary report");
+            System.out.println("0. Back");
+
+            choice = InputHelper.readIntInRange(sc, "Choose an option (0-4): ", 0, 4);
+
+            switch (choice) {
+                case 1:
+                    showSummaryUI(sc, manager, summaryReport);
+                    break;
+                case 2:
+                    importJourneysUI(sc, manager, csvFileHandler);
+                    break;
+                case 3:
+                    exportJourneysUI(sc, manager, csvFileHandler);
+                    break;
+                case 4:
+                    exportSummaryUI(sc, manager, summaryReport, reportExporter, profileManager);
+                    break;
+            }
+
+        } while (choice != 0);
     }
 
     private void showSummaryUI(Scanner sc, JourneyManager manager, SummaryReport summaryReport) {
+        System.out.println("\n=== Daily Summary ===");
+        LocalDate date = InputHelper.readDateTime(sc, "Enter date (DD-MM-YYYY HH:mm, e.g. 22-04-2026 08:30): ").toLocalDate();
+        summaryReport.printSummary(manager, date);
     }
 
     private void importJourneysUI(Scanner sc, JourneyManager manager, CsvFileHandler csvFileHandler) {
+        System.out.println("\n=== Import Journeys ===");
+        String filePath = InputHelper.readRequiredText(sc, "Enter CSV file path (e.g. journeys.csv): ");
+        List<Journey> imported = csvFileHandler.importJourneys(filePath);
+
+        if (imported.isEmpty()) {
+            System.out.println("No journeys imported.");
+        }
+        else {
+            int i = 0;
+            while (i < imported.size()) {
+                manager.getJourneys().add(imported.get(i));
+                i++;
+            }
+            System.out.println(imported.size() + " journeys imported successfully.");
+        }
     }
 
     private void exportJourneysUI(Scanner sc, JourneyManager manager, CsvFileHandler csvFileHandler) {
+
+        System.out.println("\n=== Export Journeys ===");
+
+        if (manager.getJourneys().isEmpty()) {
+            System.out.println("No journeys to export.");
+        }
+        else {
+            String filePath = InputHelper.readRequiredText(sc, "Enter CSV file path (e.g. journeys.csv): ");
+            boolean success = csvFileHandler.exportJourneys(filePath, manager.getJourneys());
+
+            if (success) {
+                System.out.println("Journeys exported to " + filePath);
+            }
+            else {
+                System.out.println("ERROR: Could not export journeys.");
+            }
+        }
     }
 
-    private void exportSummaryUI(Scanner sc,
-                                 JourneyManager manager,
-                                 SummaryReport summaryReport,
-                                 ReportExporter reportExporter,
-                                 ProfileManager profileManager) {
+    private void exportSummaryUI(Scanner sc, JourneyManager manager, SummaryReport summaryReport,
+                                 ReportExporter reportExporter, ProfileManager profileManager) {
+        System.out.println("\n=== Export Summary ===");
+        LocalDate date = InputHelper.readDateTime(sc, "Enter date (DD-MM-YYYY HH:mm, e.g. 22-04-2026 08:30): ").toLocalDate();
+
+        String filePath = InputHelper.readRequiredText(sc, "Enter file path (e.g. summary.txt): ");
+
+        String riderName = profileManager.getCurrentProfile().getName();
+
+        boolean success = reportExporter.exportSummaryAsText(filePath, riderName, date, summaryReport, manager);
+
+        if (success) {
+            System.out.println("Summary exported to " + filePath);
+        }
+        else {
+            System.out.println("ERROR: Could not export summary.");
+        }
     }
 
-    private void saveCurrentDayStateUI(ProfileManager profileManager,
-                                       JourneyManager manager,
-                                       JsonFileHandler jsonFileHandler) {
+
+    private void saveProfileBeforeExitUI(Scanner sc, ProfileManager profileManager, JsonFileHandler jsonFileHandler) {
+
+        boolean save = InputHelper.readYesNo(sc, "Save your profile? (Y/N): ");
+
+        if (save) {
+            boolean success = profileManager.saveProfile("profile.json", jsonFileHandler);
+            if (success) {
+                System.out.println("Profile saved to profile.json");
+            }
+            else {
+                System.out.println("ERROR: Could not save profile.");
+            }
+        }
+    }
+
+
+    private void saveJourneysBeforeExitUI(Scanner sc, JourneyManager manager, CsvFileHandler csvFileHandler) {
+
+        boolean save = InputHelper.readYesNo(sc, "Save today's journeys? (Y/N): ");
+
+        if (save) {
+            boolean success = csvFileHandler.exportJourneys("journeys.csv", manager.getJourneys());
+            if (success) {
+                System.out.println("Journeys saved to journeys.csv");
+            }
+            else {
+                System.out.println("ERROR: Could not save journeys.");
+            }
+        }
     }
 }
 
@@ -645,7 +873,6 @@ class JsonFileHandler {
 
         return profile;
     }
-
 
     public boolean saveConfig(String filePath, SystemConfig config) {
         boolean success = false;
@@ -1257,17 +1484,20 @@ class InputHelper {
 
             if (input.isEmpty()) {
                 System.out.println("Input cannot be blank.");
-            } else {
+            }
+            else {
                 try {
                     value = Integer.parseInt(input);
 
                     if (value < min || value > max) {
                         System.out.println("Please enter a number from " + min + " to " + max + ".");
-                    } else {
+                    }
+                    else {
                         valid = true;
                     }
 
-                } catch (NumberFormatException e) {
+                }
+                catch (NumberFormatException e) {
                     System.out.println("Please enter a whole number.");
                 }
             }
@@ -1287,10 +1517,12 @@ class InputHelper {
             if (input.equals("Y") || input.equals("YES")) {
                 answer = true;
                 valid = true;
-            } else if (input.equals("N") || input.equals("NO")) {
+            }
+            else if (input.equals("N") || input.equals("NO")) {
                 answer = false;
                 valid = true;
-            } else {
+            }
+            else {
                 System.out.println("Please enter Y or N.");
             }
         }
@@ -1308,7 +1540,8 @@ class InputHelper {
 
             if (text.isEmpty()) {
                 System.out.println("Input cannot be blank.");
-            } else {
+            }
+            else {
                 valid = true;
             }
         }
@@ -1326,11 +1559,13 @@ class InputHelper {
 
             if (input.isEmpty()) {
                 System.out.println("Input cannot be blank.");
-            } else {
+            }
+            else {
                 try {
                     dateTime = LocalDateTime.parse(input, DATE_TIME_FORMAT);
                     valid = true;
-                } catch (DateTimeParseException e) {
+                }
+                catch (DateTimeParseException e) {
                     System.out.println("Invalid date and time. Use DD-MM-YYYY HH:mm.");
                 }
             }
@@ -1350,11 +1585,13 @@ class InputHelper {
             if (input.equals("P") || input.equals("PEAK")) {
                 band = CityRideDataset.TimeBand.PEAK;
                 valid = true;
-            } else if (input.equals("O") || input.equals("OFF-PEAK")
+            }
+            else if (input.equals("O") || input.equals("OFF-PEAK")
                     || input.equals("OFF_PEAK") || input.equals("OFFPEAK")) {
                 band = CityRideDataset.TimeBand.OFF_PEAK;
                 valid = true;
-            } else {
+            }
+            else {
                 System.out.println("Invalid time band. Enter PEAK or OFF-PEAK.");
             }
         }
