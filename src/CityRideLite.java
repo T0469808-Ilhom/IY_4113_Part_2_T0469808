@@ -15,10 +15,6 @@ import java.time.LocalDateTime;
 import java.io.BufferedReader;
 import java.io.FileReader;
 
-/*
- * CityRideLite is the entry point of the application.
- * It creates all objects, loads config, and routes the user to the rider or admin flow.
- */
 public class CityRideLite {
 
     public static void main(String[] args) {
@@ -48,9 +44,11 @@ public class CityRideLite {
             if (choice == 1) {
                 openRiderFlow(sc, manager, summaryReport, profileManager,
                         reportExporter, csvFileHandler, jsonFileHandler, configManager, riderMenu);
-            } else if (choice == 2) {
+            }
+            else if (choice == 2) {
                 openAdminFlow(sc, adminMenu, configManager, jsonFileHandler);
-            } else {
+            }
+            else {
                 running = false;
             }
         }
@@ -367,21 +365,82 @@ class ProfileManager {
 
 class RiderMenu {
 
-    public void showMenu(Scanner sc,
-                         JourneyManager manager,
-                         SummaryReport summaryReport,
-                         ProfileManager profileManager,
-                         ReportExporter reportExporter,
-                         CsvFileHandler csvFileHandler,
-                         JsonFileHandler jsonFileHandler,
+    public void showMenu(Scanner sc, JourneyManager manager, SummaryReport summaryReport,
+                         ProfileManager profileManager, ReportExporter reportExporter,
+                         CsvFileHandler csvFileHandler, JsonFileHandler jsonFileHandler,
                          ConfigManager configManager) {
+
+        profileSetupUI(sc, profileManager, jsonFileHandler);
+
+        if (profileManager.hasCurrentProfile()) {
+
+            journeyMenuUI(sc, manager, summaryReport, profileManager, reportExporter, csvFileHandler, jsonFileHandler, configManager);
+
+            saveAndExitUI(sc, profileManager, manager, jsonFileHandler, csvFileHandler);
+        }
+    }
+
+
+    private void profileSetupUI(Scanner sc, ProfileManager profileManager,
+                                JsonFileHandler jsonFileHandler) {
+        int choice;
+
+        do {
+            System.out.println("\n=== CityRide Lite ===");
+            System.out.println("1. Create new profile");
+            System.out.println("2. Load existing profile");
+            System.out.println("0. Back");
+
+            choice = InputHelper.readIntInRange(sc, "Enter your choice: ", 0, 2);
+
+            if (choice == 1) {
+                createProfileUI(sc, profileManager);
+            }
+            else if (choice == 2) {
+                loadProfileUI(sc, profileManager, jsonFileHandler);
+            }
+
+        } while (choice != 0 && !profileManager.hasCurrentProfile());
     }
 
     private void createProfileUI(Scanner sc, ProfileManager profileManager) {
+        System.out.println("\n=== Create Profile ===");
+        String name = InputHelper.readRequiredText(sc, "Enter your name: ");
+
+        CityRideDataset.PassengerType type = InputHelper.readPassengerType(sc, "Enter passenger type (ADULT/STUDENT/CHILD/SENIOR_CITIZEN): ");
+
+        RiderProfile.PaymentOption payment = InputHelper.readPaymentOption(sc, "Enter payment option (CARD/CASH): ");
+        profileManager.createProfile(name, type, payment);
+
+        System.out.println("Profile created. Welcome, " + name + "!");
     }
 
-    private void loadProfileUI(Scanner sc, ProfileManager profileManager, JsonFileHandler jsonFileHandler) {
+    private void loadProfileUI(Scanner sc, ProfileManager profileManager,
+                               JsonFileHandler jsonFileHandler) {
+        System.out.println("\n=== Load Profile ===");
+        String filePath = InputHelper.readRequiredText(sc,
+                "Enter profile file path (e.g. profile.json): ");
+        RiderProfile profile = profileManager.loadProfile(filePath, jsonFileHandler);
+
+        if (profile != null) {
+            System.out.println("Profile loaded. Welcome back, " + profile.getName() + "!");
+        }
+        else {
+            System.out.println("ERROR: Could not load profile from " + filePath);
+        }
     }
+
+    private void saveAndExitUI(Scanner sc, ProfileManager profileManager,
+                               JourneyManager manager, JsonFileHandler jsonFileHandler,
+                               CsvFileHandler csvFileHandler) {
+    }
+
+    private void journeyMenuUI(Scanner sc, JourneyManager manager, SummaryReport summaryReport,
+                               ProfileManager profileManager, ReportExporter reportExporter,
+                               CsvFileHandler csvFileHandler, JsonFileHandler jsonFileHandler,
+                               ConfigManager configManager) {
+    }
+
 
     private void saveProfileUI(ProfileManager profileManager, JsonFileHandler jsonFileHandler) {
     }
