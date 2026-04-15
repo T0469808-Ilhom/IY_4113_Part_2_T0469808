@@ -281,11 +281,15 @@ class RiderProfile {
     private String name;
     private CityRideDataset.PassengerType passengerType;
     private PaymentOption defaultPaymentOption;
+    private String profileId;
 
     public RiderProfile() {
     }
 
-    public RiderProfile(String name, CityRideDataset.PassengerType passengerType, PaymentOption defaultPaymentOption) {
+    public RiderProfile(String profileId, String name,
+                        CityRideDataset.PassengerType passengerType,
+                        PaymentOption defaultPaymentOption) {
+        this.profileId = profileId;
         this.name = name;
         this.passengerType = passengerType;
         this.defaultPaymentOption = defaultPaymentOption;
@@ -314,24 +318,37 @@ class RiderProfile {
     public void setDefaultPaymentOption(PaymentOption defaultPaymentOption) {
         this.defaultPaymentOption = defaultPaymentOption;
     }
+    public String getProfileId() {
+        return profileId;
+    }
+    public void setProfileId(String profileId) {
+        this.profileId = profileId;
+    }
 }
 
 class ProfileManager {
 
     private RiderProfile currentProfile;
 
+    // Creates a new profile with a generated unique ID
     public RiderProfile createProfile(String name,
                                       CityRideDataset.PassengerType passengerType,
-                                      RiderProfile.PaymentOption paymentOption) {
-
-        RiderProfile profile = new RiderProfile(name, passengerType, paymentOption);
-        currentProfile = profile;
-
-        return profile;
+                                      RiderProfile.PaymentOption paymentOption,
+                                      JsonFileHandler jsonFileHandler) {
+        String profileId = generateProfileId(jsonFileHandler);
+        currentProfile = new RiderProfile(profileId, name, passengerType, paymentOption);
+        return currentProfile;
     }
 
-    public RiderProfile loadProfile(String filePath, JsonFileHandler jsonFileHandler) {
-        RiderProfile profile = jsonFileHandler.loadProfile(filePath);
+    private String generateProfileId(JsonFileHandler jsonFileHandler) {
+        int count = jsonFileHandler.loadProfileCount();
+        count++;
+        jsonFileHandler.saveProfileCount(count);
+        return "R" + count;
+    }
+
+    public RiderProfile loadProfile(String profileId, JsonFileHandler jsonFileHandler) {
+        RiderProfile profile = jsonFileHandler.loadProfile(profileId + ".json");
 
         if (profile != null) {
             currentProfile = profile;
@@ -340,15 +357,17 @@ class ProfileManager {
         return profile;
     }
 
-    public boolean saveProfile(String filePath, JsonFileHandler jsonFileHandler) {
-        return jsonFileHandler.saveProfile(filePath, currentProfile);
+    public boolean saveProfile(JsonFileHandler jsonFileHandler) {
+        return jsonFileHandler.saveProfile(currentProfile.getProfileId() + ".json", currentProfile);
     }
 
     public RiderProfile getCurrentProfile() {
+
         return currentProfile;
     }
 
     public void setCurrentProfile(RiderProfile profile) {
+
         currentProfile = profile;
     }
 
@@ -393,7 +412,7 @@ class RiderMenu {
             choice = InputHelper.readIntInRange(sc, "Enter your choice: ", 0, 2);
 
             if (choice == 1) {
-                createProfileUI(sc, profileManager);
+                createProfileUI(sc, profileManager, jsonFileHandler);
             }
             else if (choice == 2) {
                 loadProfileUI(sc, profileManager, jsonFileHandler);
@@ -402,30 +421,31 @@ class RiderMenu {
         } while (choice != 0 && !profileManager.hasCurrentProfile());
     }
 
-    private void createProfileUI(Scanner sc, ProfileManager profileManager) {
+    private void createProfileUI(Scanner sc, ProfileManager profileManager, JsonFileHandler jsonFileHandler) {
         System.out.println("\n=== Create Profile ===");
         String name = InputHelper.readRequiredText(sc, "Enter your name: ");
-
         CityRideDataset.PassengerType type = InputHelper.readPassengerType(sc, "Enter passenger type (ADULT/STUDENT/CHILD/SENIOR_CITIZEN): ");
-
         RiderProfile.PaymentOption payment = InputHelper.readPaymentOption(sc, "Enter payment option (CARD/CASH): ");
-        profileManager.createProfile(name, type, payment);
 
-        System.out.println("Profile created. Welcome, " + name + "!");
+        RiderProfile profile = profileManager.createProfile(name, type, payment, jsonFileHandler);
+        profileManager.saveProfile(jsonFileHandler);
+
+        System.out.println("Profile created successfully!");
+        System.out.println("Your profile ID is: " + profile.getProfileId());
+        System.out.println("Please remember your ID to load your profile next time.");
     }
 
     private void loadProfileUI(Scanner sc, ProfileManager profileManager,
                                JsonFileHandler jsonFileHandler) {
         System.out.println("\n=== Load Profile ===");
-        String filePath = InputHelper.readRequiredText(sc,
-                "Enter profile file path (e.g. profile.json): ");
-        RiderProfile profile = profileManager.loadProfile(filePath, jsonFileHandler);
+        String profileId = InputHelper.readRequiredText(sc, "Enter your profile ID (e.g. R1): ");
+        RiderProfile profile = profileManager.loadProfile(profileId, jsonFileHandler);
 
         if (profile != null) {
             System.out.println("Profile loaded. Welcome back, " + profile.getName() + "!");
         }
         else {
-            System.out.println("ERROR: Could not load profile from " + filePath);
+            System.out.println("ERROR: No profile found with ID " + profileId);
         }
     }
 
@@ -675,14 +695,14 @@ class RiderMenu {
     }
 
 
-    private void saveProfileBeforeExitUI(Scanner sc, ProfileManager profileManager, JsonFileHandler jsonFileHandler) {
-
+    private void saveProfileBeforeExitUI(Scanner sc, ProfileManager profileManager,
+                                         JsonFileHandler jsonFileHandler) {
         boolean save = InputHelper.readYesNo(sc, "Save your profile? (Y/N): ");
 
         if (save) {
-            boolean success = profileManager.saveProfile("profile.json", jsonFileHandler);
+            boolean success = profileManager.saveProfile(jsonFileHandler);
             if (success) {
-                System.out.println("Profile saved to profile.json");
+                System.out.println("Profile saved.");
             }
             else {
                 System.out.println("ERROR: Could not save profile.");
@@ -803,10 +823,13 @@ class JsonFileHandler {
 
         if (profile == null) {
             System.out.println("ERROR: No profile to save.");
-        } else {
+        }
+        else {
             try {
                 BufferedWriter writer = new BufferedWriter(new FileWriter(filePath));
                 writer.write("{");
+                writer.newLine();
+                writer.write("  \"profileId\": \"" + profile.getProfileId() + "\",");
                 writer.newLine();
                 writer.write("  \"name\": \"" + profile.getName() + "\",");
                 writer.newLine();
@@ -841,7 +864,42 @@ class JsonFileHandler {
         return profile;
     }
 
+    public int loadProfileCount() {
+        int count = 0;
+
+        try {
+            BufferedReader reader = new BufferedReader(new FileReader("profiles_count.txt"));
+            String line = reader.readLine();
+            if (line != null) {
+                count = Integer.parseInt(line.trim());
+            }
+            reader.close();
+        }
+        catch (IOException ex) {
+            System.out.println("No profile count file found. Starting from 0.");
+        }
+
+        return count;
+    }
+
+    public boolean saveProfileCount(int count) {
+        boolean success = false;
+
+        try {
+            BufferedWriter writer = new BufferedWriter(new FileWriter("profiles_count.txt"));
+            writer.write(String.valueOf(count));
+            writer.close();
+            success = true;
+        }
+        catch (IOException ex) {
+            System.out.println("ERROR: Could not save profile count.");
+        }
+
+        return success;
+    }
+
     private RiderProfile parseProfile(BufferedReader reader) {
+        String profileId = "";
         String name = "";
         CityRideDataset.PassengerType passengerType = CityRideDataset.PassengerType.ADULT;
         RiderProfile.PaymentOption paymentOption = RiderProfile.PaymentOption.CARD;
@@ -851,24 +909,30 @@ class JsonFileHandler {
             while (line != null) {
                 line = line.trim();
 
-                if (line.contains("name")) {
+                if (line.contains("profileId")) {
+                    profileId = extractValue(line);
+                }
+                else if (line.contains("name")) {
                     name = extractValue(line);
-                } else if (line.contains("passengerType")) {
+                }
+                else if (line.contains("passengerType")) {
                     passengerType = CityRideDataset.PassengerType.valueOf(extractValue(line));
-                } else if (line.contains("defaultPaymentOption")) {
+                }
+                else if (line.contains("defaultPaymentOption")) {
                     paymentOption = RiderProfile.PaymentOption.valueOf(extractValue(line));
                 }
 
                 line = reader.readLine();
             }
-        } catch (IOException ex) {
+        }
+        catch (IOException ex) {
             System.out.println("ERROR: Could not read profile data.");
         }
 
         RiderProfile profile = null;
 
         if (!name.isEmpty()) {
-            profile = new RiderProfile(name, passengerType, paymentOption);
+            profile = new RiderProfile(profileId, name, passengerType, paymentOption);
         }
 
         return profile;
