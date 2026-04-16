@@ -269,6 +269,17 @@ class JourneyManager {
 
         return total;
     }
+
+    public void recalculateFaresForJourney(Journey j, SystemConfig config) {
+        BigDecimal baseFare = config.getBaseFare(j.getFromZone(), j.getToZone(), j.getBand());
+
+        if (baseFare != null) {
+            BigDecimal discountedFare = calc.discountedFare(config, j.getFromZone(), j.getToZone(), j.getBand(), j.getType());
+            j.setBaseFare(baseFare);
+            j.setDiscountedFare(discountedFare);
+            j.setDiscountApplied(baseFare.subtract(discountedFare).setScale(2, RoundingMode.HALF_UP));
+        }
+    }
 }
 
 class RiderProfile {
@@ -396,7 +407,7 @@ class RiderMenu {
             journeyMenuUI(sc, manager, summaryReport, profileManager, reportExporter, csvFileHandler, configManager);
 
             saveProfileBeforeExitUI(sc, profileManager, jsonFileHandler);
-            saveJourneysBeforeExitUI(sc, manager, csvFileHandler);
+            saveJourneysBeforeExitUI(sc, manager, csvFileHandler, profileManager);
         }
     }
 
@@ -528,6 +539,7 @@ class RiderMenu {
                 j.setFromZone(InputHelper.readIntInRange(sc, "Enter new from zone (1-5): ", 1, 5));
                 j.setToZone(InputHelper.readIntInRange(sc, "Enter new to zone (1-5): ", 1, 5));
                 j.setBand(InputHelper.readTimeBand(sc, "Enter new time band (PEAK/OFF-PEAK): "));
+                manager.recalculateFaresForJourney(j, configManager.getCurrentConfig());
                 manager.recalculateChargedFaresForDay(j.getDate(), j.getType(), configManager.getCurrentConfig());
                 System.out.println("Journey updated successfully.");
             }
@@ -710,15 +722,17 @@ class RiderMenu {
         }
     }
 
-
-    private void saveJourneysBeforeExitUI(Scanner sc, JourneyManager manager, CsvFileHandler csvFileHandler) {
-
+    private void saveJourneysBeforeExitUI(Scanner sc, JourneyManager manager,
+                                          CsvFileHandler csvFileHandler,
+                                          ProfileManager profileManager) {
         boolean save = InputHelper.readYesNo(sc, "Save today's journeys? (Y/N): ");
 
         if (save) {
-            boolean success = csvFileHandler.exportJourneys("journeys.csv", manager.getJourneys());
+            String fileName = profileManager.getCurrentProfile().getProfileId() + "_journeys.csv";
+            boolean success = csvFileHandler.exportJourneys(fileName, manager.getJourneys());
+
             if (success) {
-                System.out.println("Journeys saved to journeys.csv");
+                System.out.println("Journeys saved to " + fileName);
             }
             else {
                 System.out.println("ERROR: Could not save journeys.");
@@ -1163,26 +1177,24 @@ class SystemConfig {
 
 class ReportExporter {
 
-    public boolean exportSummaryAsText(String filePath,
-                                       String riderName,
-                                       LocalDate date,
-                                       SummaryReport summaryReport,
+    public boolean exportSummaryAsText(String filePath, String riderName,
+                                       LocalDate date, SummaryReport summaryReport,
                                        JourneyManager manager) {
-
         boolean success = false;
 
         try {
             BufferedWriter writer = new BufferedWriter(new FileWriter(filePath));
-
             writer.write("Rider: " + riderName);
             writer.newLine();
+            writer.write("Date: " + date);
             writer.newLine();
+            writer.newLine();
+            writer.write(summaryReport.buildSummaryText(manager, date));
             writer.close();
-
             success = true;
-
-        } catch (IOException ex) {
-            System.out.println("Error writing summary text file.");
+        }
+        catch (IOException ex) {
+            System.out.println("ERROR: Could not export summary to " + filePath);
         }
 
         return success;
@@ -1229,9 +1241,6 @@ class SummaryReport {
         BigDecimal totalCharged = BigDecimal.ZERO;
         BigDecimal mostExpensiveFare = BigDecimal.ZERO;
     }
-
-
-
 
     // Loops through journeys and fills in all summary values for the given date
     private SummaryData calculateSummaryData(JourneyManager manager, LocalDate date) {
@@ -1282,32 +1291,46 @@ class SummaryReport {
     }
 
 
-
     // Prints the daily summary to the console
     public void printSummary(JourneyManager manager, LocalDate date) {
         SummaryData data = calculateSummaryData(manager, date);
-        String capReached = data.savings.compareTo(BigDecimal.ZERO) > 0 ? "Yes" : "No";
-
-        System.out.println("=== CityRide Lite Daily Summary ===");
-        System.out.println("Date: " + date);
-        System.out.println("Total journeys: " + data.totalJourneys);
-        System.out.println("Total charged: GBP " + money(data.totalCharged));
-        System.out.println("Average cost per journey: GBP " + money(data.average));
-
-        if (data.mostExpensiveId == -1) {
-            System.out.println("Most expensive journey: none");
-        } else {
-            System.out.println("Most expensive journey: ID " + data.mostExpensiveId
-                    + " (GBP " + money(data.mostExpensiveFare) + ")");
-        }
-
-        System.out.println("Savings from cap: GBP " + money(data.savings));
-        System.out.println("Cap reached: " + capReached);
-        System.out.println("Peak journeys: " + data.peakCount);
-        System.out.println("Off-peak journeys: " + data.offPeakCount);
-
+        System.out.println(buildSummaryText(manager, date));
         printZonePairCounts(data.zonePairCounts);
         printZoneCounts(data.zoneCounts);
+    }
+
+    // Builds summary as a text string so ReportExporter can write it to a file
+    public String buildSummaryText(JourneyManager manager, LocalDate date) {
+        SummaryData data = calculateSummaryData(manager, date);
+        String result = "";
+
+        result = result + "=== CityRide Lite Daily Summary ===" + "\n";
+        result = result + "Date: " + date + "\n";
+        result = result + "Total journeys: " + data.totalJourneys + "\n";
+        result = result + "Total charged: GBP " + money(data.totalCharged) + "\n";
+        result = result + "Average cost per journey: GBP " + money(data.average) + "\n";
+
+        if (data.mostExpensiveId == -1) {
+            result = result + "Most expensive journey: none" + "\n";
+        }
+        else {
+            result = result + "Most expensive journey: ID " + data.mostExpensiveId
+                    + " (GBP " + money(data.mostExpensiveFare) + ")" + "\n";
+        }
+
+        result = result + "Savings from cap: GBP " + money(data.savings) + "\n";
+
+        if (data.savings.compareTo(BigDecimal.ZERO) > 0) {
+            result = result + "Cap reached: Yes" + "\n";
+        }
+        else {
+            result = result + "Cap reached: No" + "\n";
+        }
+
+        result = result + "Peak journeys: " + data.peakCount + "\n";
+        result = result + "Off-peak journeys: " + data.offPeakCount + "\n";
+
+        return result;
     }
 
     // Calculates total savings from cap for a given date
