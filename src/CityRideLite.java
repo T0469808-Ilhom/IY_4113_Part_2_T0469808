@@ -178,6 +178,20 @@ class JourneyManager {
 
         return result;
     }
+    public void appendJourneys(List<Journey> importedJourneys) {
+        int i = 0;
+
+        while (i < importedJourneys.size()) {
+            Journey journey = importedJourneys.get(i);
+            journeys.add(journey);
+
+            if (journey.getId() >= nextID) {
+                nextID = journey.getId() + 1;
+            }
+
+            i++;
+        }
+    }
 
     public void recalculateChargedFaresForDay(LocalDate date, CityRideDataset.PassengerType type, SystemConfig config) {
         List<Journey> dayJourneys = getJourneysForDateAndType(date, type);
@@ -664,7 +678,8 @@ class RiderMenu {
     }
 
     private void summaryAndReportsMenuUI(Scanner sc, JourneyManager manager, SummaryReport summaryReport,
-                                         ProfileManager profileManager, ReportExporter reportExporter, CsvFileHandler csvFileHandler) {
+                                         ProfileManager profileManager, ReportExporter reportExporter,
+                                         CsvFileHandler csvFileHandler) {
         int choice;
 
         do {
@@ -682,10 +697,10 @@ class RiderMenu {
                     showSummaryUI(sc, manager, summaryReport);
                     break;
                 case 2:
-                    importJourneysUI(sc, manager, csvFileHandler);
+                    importJourneysUI(manager, csvFileHandler, profileManager);
                     break;
                 case 3:
-                    exportJourneysUI(sc, manager, csvFileHandler);
+                    exportJourneysUI(manager, csvFileHandler, profileManager);
                     break;
                 case 4:
                     exportSummaryUI(sc, manager, summaryReport, reportExporter, profileManager);
@@ -701,33 +716,31 @@ class RiderMenu {
         summaryReport.printSummary(manager, date);
     }
 
-    private void importJourneysUI(Scanner sc, JourneyManager manager, CsvFileHandler csvFileHandler) {
+    private void importJourneysUI(JourneyManager manager, CsvFileHandler csvFileHandler,
+                                  ProfileManager profileManager) {
         System.out.println("\n=== Import Journeys ===");
-        String filePath = InputHelper.readRequiredText(sc, "Enter CSV file path (e.g. journeys.csv): ");
+
+        String filePath = profileManager.getCurrentProfile().getProfileId() + "_journeys.csv";
         List<Journey> imported = csvFileHandler.importJourneys(filePath);
 
         if (imported.isEmpty()) {
-            System.out.println("No journeys imported.");
+            System.out.println("No journeys found in " + filePath);
         }
         else {
-            int i = 0;
-            while (i < imported.size()) {
-                manager.getJourneys().add(imported.get(i));
-                i++;
-            }
-            System.out.println(imported.size() + " journeys imported successfully.");
+            manager.setJourneys(imported);
+            System.out.println(imported.size() + " journeys imported from " + filePath);
         }
     }
 
-    private void exportJourneysUI(Scanner sc, JourneyManager manager, CsvFileHandler csvFileHandler) {
-
+    private void exportJourneysUI(JourneyManager manager, CsvFileHandler csvFileHandler,
+                                  ProfileManager profileManager) {
         System.out.println("\n=== Export Journeys ===");
 
         if (manager.getJourneys().isEmpty()) {
             System.out.println("No journeys to export.");
         }
         else {
-            String filePath = InputHelper.readRequiredText(sc, "Enter CSV file path (e.g. journeys.csv): ");
+            String filePath = profileManager.getCurrentProfile().getProfileId() + "_journeys.csv";
             boolean success = csvFileHandler.exportJourneys(filePath, manager.getJourneys());
 
             if (success) {
@@ -742,11 +755,12 @@ class RiderMenu {
     private void exportSummaryUI(Scanner sc, JourneyManager manager, SummaryReport summaryReport,
                                  ReportExporter reportExporter, ProfileManager profileManager) {
         System.out.println("\n=== Export Summary ===");
-        LocalDate date = InputHelper.readDateTime(sc, "Enter date (DD-MM-YYYY HH:mm, e.g. 22-04-2026 08:30): ").toLocalDate();
 
-        String filePath = InputHelper.readRequiredText(sc, "Enter file path (e.g. summary.txt): ");
+        LocalDate date = InputHelper.readDateTime(sc,
+                "Enter date (DD-MM-YYYY HH:mm, e.g. 22-04-2026 08:30): ").toLocalDate();
 
         String riderName = profileManager.getCurrentProfile().getName();
+        String filePath = buildSummaryFileName(profileManager, date);
 
         boolean success = reportExporter.exportSummaryAsText(filePath, riderName, date, summaryReport, manager);
 
@@ -791,6 +805,15 @@ class RiderMenu {
             }
         }
     }
+    private String buildSummaryFileName(ProfileManager profileManager, LocalDate date) {
+        DateTimeFormatter dateFormat = DateTimeFormatter.ofPattern("dd-MM-yyyy");
+
+        String profileId = profileManager.getCurrentProfile().getProfileId();
+        String riderName = profileManager.getCurrentProfile().getName();
+        String safeName = riderName.replace(" ", "_");
+
+        return profileId + "_" + safeName + "_" + date.format(dateFormat) + "_summary.txt";
+    }
 }
 
 class ConfigManager {
@@ -829,10 +852,12 @@ class ConfigManager {
             from++;
         }
 
-        // Load default discounts from dataset
-        for (CityRideDataset.PassengerType type : CityRideDataset.PassengerType.values()) {
-            config.setDiscount(type, CityRideDataset.DISCOUNT_RATE.get(type));
-            config.setDailyCap(type, CityRideDataset.DAILY_CAP.get(type));
+        CityRideDataset.PassengerType[] types = CityRideDataset.PassengerType.values();
+        int i = 0;
+        while (i < types.length) {
+            config.setDiscount(types[i], CityRideDataset.DISCOUNT_RATE.get(types[i]));
+            config.setDailyCap(types[i], CityRideDataset.DAILY_CAP.get(types[i]));
+            i++;
         }
 
         return config;
@@ -875,27 +900,22 @@ class CsvFileHandler {
     public List<Journey> importJourneys(String filePath) {
         List<Journey> journeys = new ArrayList<>();
 
-        java.io.File file = new java.io.File(filePath);
-
-        if (!file.exists()) {
-            return journeys;
-        }
-
         try {
+            java.io.File file = new java.io.File(filePath);
+
+            if (!file.exists()) {
+                return journeys;
+            }
+
             BufferedReader reader = new BufferedReader(new FileReader(filePath));
             String line = reader.readLine();
 
-            if (line != null && !line.startsWith("id,")) {
-                Journey journey = parseJourneyLine(line);
-                if (journey != null) {
-                    journeys.add(journey);
-                }
+            if (line != null && line.startsWith("id,")) {
+                line = reader.readLine();
             }
 
-            line = reader.readLine();
-
             while (line != null) {
-                Journey journey = parseJourneyLine(line);
+                Journey journey = parseJourney(line);
 
                 if (journey != null) {
                     journeys.add(journey);
@@ -952,13 +972,8 @@ class CsvFileHandler {
         return success;
     }
 
-    public boolean exportLineItems(String filePath, List<Journey> journeys) {
-        return exportJourneys(filePath, journeys);
-    }
-
-    private Journey parseJourneyLine(String line) {
+    private Journey parseJourney(String line) {
         Journey journey = null;
-
         String[] parts = line.split(",");
 
         if (parts.length == 9) {
@@ -977,11 +992,8 @@ class CsvFileHandler {
                         baseFare, discountedFare, chargedFare);
             }
             catch (Exception ex) {
-                System.out.println("WARNING: Skipping invalid CSV line.");
+                System.out.println("WARNING: Skipping invalid journey line in CSV.");
             }
-        }
-        else {
-            System.out.println("WARNING: Skipping invalid CSV line.");
         }
 
         return journey;
