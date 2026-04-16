@@ -280,6 +280,11 @@ class JourneyManager {
             j.setDiscountApplied(baseFare.subtract(discountedFare).setScale(2, RoundingMode.HALF_UP));
         }
     }
+
+    public void clearJourneys() {
+        journeys.clear();
+        nextID = 1;
+    }
 }
 
 class RiderProfile {
@@ -400,7 +405,7 @@ class RiderMenu {
                          CsvFileHandler csvFileHandler, JsonFileHandler jsonFileHandler,
                          ConfigManager configManager) {
 
-        profileSetupUI(sc, profileManager, jsonFileHandler);
+        profileSetupUI(sc, profileManager, jsonFileHandler, manager);
 
         if (profileManager.hasCurrentProfile()) {
 
@@ -411,7 +416,8 @@ class RiderMenu {
         }
     }
 
-    private void profileSetupUI(Scanner sc, ProfileManager profileManager, JsonFileHandler jsonFileHandler) {
+    private void profileSetupUI(Scanner sc, ProfileManager profileManager,
+                                JsonFileHandler jsonFileHandler, JourneyManager manager) {
         int choice;
 
         do {
@@ -423,23 +429,26 @@ class RiderMenu {
             choice = InputHelper.readIntInRange(sc, "Enter your choice: ", 0, 2);
 
             if (choice == 1) {
-                createProfileUI(sc, profileManager, jsonFileHandler);
+                createProfileUI(sc, profileManager, jsonFileHandler, manager);
             }
             else if (choice == 2) {
-                loadProfileUI(sc, profileManager, jsonFileHandler);
+                loadProfileUI(sc, profileManager, jsonFileHandler, manager);
             }
 
         } while (choice != 0 && !profileManager.hasCurrentProfile());
     }
-
-    private void createProfileUI(Scanner sc, ProfileManager profileManager, JsonFileHandler jsonFileHandler) {
+    private void createProfileUI(Scanner sc, ProfileManager profileManager,
+                                 JsonFileHandler jsonFileHandler, JourneyManager manager) {
         System.out.println("\n=== Create Profile ===");
         String name = InputHelper.readRequiredText(sc, "Enter your name: ");
-        CityRideDataset.PassengerType type = InputHelper.readPassengerType(sc, "Enter passenger type (ADULT/STUDENT/CHILD/SENIOR_CITIZEN): ");
-        RiderProfile.PaymentOption payment = InputHelper.readPaymentOption(sc, "Enter payment option (CARD/CASH): ");
+        CityRideDataset.PassengerType type = InputHelper.readPassengerType(sc,
+                "Enter passenger type (ADULT/STUDENT/CHILD/SENIOR_CITIZEN): ");
+        RiderProfile.PaymentOption payment = InputHelper.readPaymentOption(sc,
+                "Enter payment option (CARD/CASH): ");
 
         RiderProfile profile = profileManager.createProfile(name, type, payment, jsonFileHandler);
         profileManager.saveProfile(jsonFileHandler);
+        manager.clearJourneys();
 
         System.out.println("Profile created successfully!");
         System.out.println("Your profile ID is: " + profile.getProfileId());
@@ -447,16 +456,32 @@ class RiderMenu {
     }
 
     private void loadProfileUI(Scanner sc, ProfileManager profileManager,
-                               JsonFileHandler jsonFileHandler) {
+                               JsonFileHandler jsonFileHandler, JourneyManager manager) {
         System.out.println("\n=== Load Profile ===");
-        String profileId = InputHelper.readRequiredText(sc, "Enter your profile ID (e.g. R1): ");
-        RiderProfile profile = profileManager.loadProfile(profileId, jsonFileHandler);
 
-        if (profile != null) {
-            System.out.println("Profile loaded. Welcome back, " + profile.getName() + "!");
+        List<String> available = jsonFileHandler.listAvailableProfiles();
+
+        if (available.isEmpty()) {
+            System.out.println("No profiles found. Please create a new profile.");
         }
         else {
-            System.out.println("ERROR: No profile found with ID " + profileId);
+            System.out.println("Available profiles:");
+            int i = 0;
+            while (i < available.size()) {
+                System.out.println("  " + available.get(i));
+                i++;
+            }
+
+            String profileId = InputHelper.readRequiredText(sc, "Enter your profile ID (e.g. R1): ");
+            RiderProfile profile = profileManager.loadProfile(profileId, jsonFileHandler);
+
+            if (profile != null) {
+                manager.clearJourneys();
+                System.out.println("Profile loaded. Welcome back, " + profile.getName() + "!");
+            }
+            else {
+                System.out.println("ERROR: No profile found with ID " + profileId + ". Please try again.");
+            }
         }
     }
 
@@ -493,7 +518,7 @@ class RiderMenu {
                     listJourneysUI(manager);
                     break;
                 case 5:
-                    showRunningTotalsUI(manager, profileManager, configManager);
+                    showRunningTotalsUI(manager, profileManager, configManager, sc);
                     break;
                 case 6:
                     summaryAndReportsMenuUI(sc, manager, summaryReport, profileManager, reportExporter, csvFileHandler);
@@ -587,19 +612,22 @@ class RiderMenu {
         }
     }
 
-    private void showRunningTotalsUI(JourneyManager manager, ProfileManager profileManager, ConfigManager configManager) {
+    private void showRunningTotalsUI(JourneyManager manager, ProfileManager profileManager,
+                                     ConfigManager configManager, Scanner sc) {
         System.out.println("\n=== Running Totals ===");
 
         if (manager.getJourneys().isEmpty()) {
             System.out.println("No journeys recorded yet.");
-        } else {
+        }
+        else {
+            LocalDate date = InputHelper.readDateTime(sc,
+                    "Enter date to view totals (DD-MM-YYYY HH:mm, e.g. 22-04-2026 08:30): ").toLocalDate();
             CityRideDataset.PassengerType type = profileManager.getCurrentProfile().getPassengerType();
-            LocalDate today = LocalDate.now();
-            BigDecimal total = manager.getTotalChargedForDay(today, type);
+            BigDecimal total = manager.getTotalChargedForDay(date, type);
             BigDecimal cap = configManager.getCurrentConfig().getDailyCap(type);
 
             System.out.println("Passenger type: " + type);
-            System.out.println("Total charged today: GBP " + total.setScale(2, RoundingMode.HALF_UP));
+            System.out.println("Total charged: GBP " + total.setScale(2, RoundingMode.HALF_UP));
             System.out.println("Daily cap: GBP " + cap.setScale(2, RoundingMode.HALF_UP));
 
             if (total.compareTo(cap) >= 0) {
@@ -817,16 +845,122 @@ class ConfigManager {
 
 class CsvFileHandler {
 
+    private static final DateTimeFormatter DATE_TIME_FORMAT =
+            DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm");
+
     public List<Journey> importJourneys(String filePath) {
-        return new ArrayList<>();
+        List<Journey> journeys = new ArrayList<>();
+
+        java.io.File file = new java.io.File(filePath);
+
+        if (!file.exists()) {
+            return journeys;
+        }
+
+        try {
+            BufferedReader reader = new BufferedReader(new FileReader(filePath));
+            String line = reader.readLine();
+
+            if (line != null && !line.startsWith("id,")) {
+                Journey journey = parseJourneyLine(line);
+                if (journey != null) {
+                    journeys.add(journey);
+                }
+            }
+
+            line = reader.readLine();
+
+            while (line != null) {
+                Journey journey = parseJourneyLine(line);
+
+                if (journey != null) {
+                    journeys.add(journey);
+                }
+
+                line = reader.readLine();
+            }
+
+            reader.close();
+        }
+        catch (IOException ex) {
+            System.out.println("ERROR: Could not import journeys from " + filePath);
+        }
+
+        return journeys;
     }
 
     public boolean exportJourneys(String filePath, List<Journey> journeys) {
-        return false;
+        boolean success = false;
+
+        try {
+            BufferedWriter writer = new BufferedWriter(new FileWriter(filePath));
+
+            writer.write("id,dateTime,fromZone,toZone,band,type,baseFare,discountedFare,chargedFare");
+            writer.newLine();
+
+            int i = 0;
+            while (i < journeys.size()) {
+                Journey j = journeys.get(i);
+
+                writer.write(
+                        j.getId() + "," +
+                                j.getDateTime().format(DATE_TIME_FORMAT) + "," +
+                                j.getFromZone() + "," +
+                                j.getToZone() + "," +
+                                j.getBand().name() + "," +
+                                j.getType().name() + "," +
+                                j.getBaseFare().toPlainString() + "," +
+                                j.getDiscountedFare().toPlainString() + "," +
+                                j.getChargedFare().toPlainString()
+                );
+                writer.newLine();
+
+                i++;
+            }
+
+            writer.close();
+            success = true;
+        }
+        catch (IOException ex) {
+            System.out.println("ERROR: Could not export journeys to " + filePath);
+        }
+
+        return success;
     }
 
     public boolean exportLineItems(String filePath, List<Journey> journeys) {
-        return false;
+        return exportJourneys(filePath, journeys);
+    }
+
+    private Journey parseJourneyLine(String line) {
+        Journey journey = null;
+
+        String[] parts = line.split(",");
+
+        if (parts.length == 9) {
+            try {
+                int id = Integer.parseInt(parts[0].trim());
+                LocalDateTime dateTime = LocalDateTime.parse(parts[1].trim(), DATE_TIME_FORMAT);
+                int fromZone = Integer.parseInt(parts[2].trim());
+                int toZone = Integer.parseInt(parts[3].trim());
+                CityRideDataset.TimeBand band = CityRideDataset.TimeBand.valueOf(parts[4].trim());
+                CityRideDataset.PassengerType type = CityRideDataset.PassengerType.valueOf(parts[5].trim());
+                BigDecimal baseFare = new BigDecimal(parts[6].trim());
+                BigDecimal discountedFare = new BigDecimal(parts[7].trim());
+                BigDecimal chargedFare = new BigDecimal(parts[8].trim());
+
+                journey = new Journey(dateTime, id, fromZone, toZone, band, type,
+                        baseFare, discountedFare, chargedFare);
+            }
+            catch (Exception ex) {
+                System.out.println("WARNING: Skipping invalid CSV line.");
+            }
+        }
+        else {
+            System.out.println("WARNING: Skipping invalid CSV line.");
+        }
+
+        return journey;
     }
 }
 
@@ -912,6 +1046,33 @@ class JsonFileHandler {
         return success;
     }
 
+    // Returns a list of all profile IDs found in the current directory
+    public List<String> listAvailableProfiles() {
+        List<String> profiles = new ArrayList<>();
+
+        try {
+            java.io.File folder = new java.io.File(".");
+            java.io.File[] files = folder.listFiles();
+
+            if (files != null) {
+                int i = 0;
+                while (i < files.length) {
+                    String fileName = files[i].getName();
+                    if (fileName.startsWith("R") && fileName.endsWith(".json")
+                            && !fileName.equals("config.json")) {
+                        profiles.add(fileName.replace(".json", ""));
+                    }
+                    i++;
+                }
+            }
+        }
+        catch (Exception ex) {
+            System.out.println("ERROR: Could not list profiles.");
+        }
+
+        return profiles;
+    }
+
     private RiderProfile parseProfile(BufferedReader reader) {
         String profileId = "";
         String name = "";
@@ -930,10 +1091,20 @@ class JsonFileHandler {
                     name = extractValue(line);
                 }
                 else if (line.contains("passengerType")) {
-                    passengerType = CityRideDataset.PassengerType.valueOf(extractValue(line));
+                    try {
+                        passengerType = CityRideDataset.PassengerType.valueOf(extractValue(line));
+                    }
+                    catch (IllegalArgumentException ex) {
+                        System.out.println("WARNING: Invalid passenger type in profile file. Using ADULT.");
+                    }
                 }
                 else if (line.contains("defaultPaymentOption")) {
-                    paymentOption = RiderProfile.PaymentOption.valueOf(extractValue(line));
+                    try {
+                        paymentOption = RiderProfile.PaymentOption.valueOf(extractValue(line));
+                    }
+                    catch (IllegalArgumentException ex) {
+                        System.out.println("WARNING: Invalid payment option in profile file. Using CARD.");
+                    }
                 }
 
                 line = reader.readLine();
