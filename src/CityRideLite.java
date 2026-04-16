@@ -280,6 +280,22 @@ class JourneyManager {
             j.setDiscountApplied(baseFare.subtract(discountedFare).setScale(2, RoundingMode.HALF_UP));
         }
     }
+    public void setJourneys(List<Journey> newJourneys) {
+        journeys.clear();
+        nextID = 1;
+
+        int i = 0;
+        while (i < newJourneys.size()) {
+            Journey journey = newJourneys.get(i);
+            journeys.add(journey);
+
+            if (journey.getId() >= nextID) {
+                nextID = journey.getId() + 1;
+            }
+
+            i++;
+        }
+    }
 
     public void clearJourneys() {
         journeys.clear();
@@ -405,11 +421,12 @@ class RiderMenu {
                          CsvFileHandler csvFileHandler, JsonFileHandler jsonFileHandler,
                          ConfigManager configManager) {
 
-        profileSetupUI(sc, profileManager, jsonFileHandler, manager);
+        profileSetupUI(sc, profileManager, jsonFileHandler, manager, csvFileHandler);
 
         if (profileManager.hasCurrentProfile()) {
 
-            journeyMenuUI(sc, manager, summaryReport, profileManager, reportExporter, csvFileHandler, configManager);
+            journeyMenuUI(sc, manager, summaryReport, profileManager,
+                    reportExporter, csvFileHandler, configManager);
 
             saveProfileBeforeExitUI(sc, profileManager, jsonFileHandler);
             saveJourneysBeforeExitUI(sc, manager, csvFileHandler, profileManager);
@@ -417,7 +434,8 @@ class RiderMenu {
     }
 
     private void profileSetupUI(Scanner sc, ProfileManager profileManager,
-                                JsonFileHandler jsonFileHandler, JourneyManager manager) {
+                                JsonFileHandler jsonFileHandler, JourneyManager manager,
+                                CsvFileHandler csvFileHandler) {
         int choice;
 
         do {
@@ -432,7 +450,7 @@ class RiderMenu {
                 createProfileUI(sc, profileManager, jsonFileHandler, manager);
             }
             else if (choice == 2) {
-                loadProfileUI(sc, profileManager, jsonFileHandler, manager);
+                loadProfileUI(sc, profileManager, jsonFileHandler, manager, csvFileHandler);
             }
 
         } while (choice != 0 && !profileManager.hasCurrentProfile());
@@ -456,7 +474,8 @@ class RiderMenu {
     }
 
     private void loadProfileUI(Scanner sc, ProfileManager profileManager,
-                               JsonFileHandler jsonFileHandler, JourneyManager manager) {
+                               JsonFileHandler jsonFileHandler, JourneyManager manager,
+                               CsvFileHandler csvFileHandler) {
         System.out.println("\n=== Load Profile ===");
 
         List<String> available = jsonFileHandler.listAvailableProfiles();
@@ -476,8 +495,13 @@ class RiderMenu {
             RiderProfile profile = profileManager.loadProfile(profileId, jsonFileHandler);
 
             if (profile != null) {
-                manager.clearJourneys();
+                String journeysFile = profile.getProfileId() + "_journeys.csv";
+                List<Journey> loadedJourneys = csvFileHandler.importJourneys(journeysFile);
+
+                manager.setJourneys(loadedJourneys);
+
                 System.out.println("Profile loaded. Welcome back, " + profile.getName() + "!");
+                System.out.println("Loaded journeys: " + loadedJourneys.size());
             }
             else {
                 System.out.println("ERROR: No profile found with ID " + profileId + ". Please try again.");
@@ -1081,16 +1105,17 @@ class JsonFileHandler {
 
         try {
             String line = reader.readLine();
+
             while (line != null) {
                 line = line.trim();
 
-                if (line.contains("profileId")) {
+                if (line.startsWith("\"profileId\"")) {
                     profileId = extractValue(line);
                 }
-                else if (line.contains("name")) {
+                else if (line.startsWith("\"name\"")) {
                     name = extractValue(line);
                 }
-                else if (line.contains("passengerType")) {
+                else if (line.startsWith("\"passengerType\"")) {
                     try {
                         passengerType = CityRideDataset.PassengerType.valueOf(extractValue(line));
                     }
@@ -1098,7 +1123,7 @@ class JsonFileHandler {
                         System.out.println("WARNING: Invalid passenger type in profile file. Using ADULT.");
                     }
                 }
-                else if (line.contains("defaultPaymentOption")) {
+                else if (line.startsWith("\"defaultPaymentOption\"")) {
                     try {
                         paymentOption = RiderProfile.PaymentOption.valueOf(extractValue(line));
                     }
@@ -1227,28 +1252,30 @@ class JsonFileHandler {
 
         try {
             String line = reader.readLine();
+
             while (line != null) {
                 line = line.trim();
 
-                if (line.contains("peakStart")) {
+                if (line.startsWith("\"peakStart\"")) {
                     config.setPeakWindow(extractValue(line), config.getPeakEnd());
                 }
-                else if (line.contains("peakEnd")) {
+                else if (line.startsWith("\"peakEnd\"")) {
                     config.setPeakWindow(config.getPeakStart(), extractValue(line));
                 }
-                else if (line.contains("discount_")) {
+                else if (line.startsWith("\"discount_")) {
                     parseDiscount(line, config);
                 }
-                else if (line.contains("cap_")) {
+                else if (line.startsWith("\"cap_")) {
                     parseCap(line, config);
                 }
-                else if (line.contains("fare_")) {
+                else if (line.startsWith("\"fare_")) {
                     parseFare(line, config);
                 }
 
                 line = reader.readLine();
             }
-        } catch (IOException ex) {
+        }
+        catch (IOException ex) {
             System.out.println("ERROR: Could not read config data.");
         }
 
@@ -1277,12 +1304,19 @@ class JsonFileHandler {
     }
 
     private String extractValue(String line) {
+        String value = "";
+
         if (line.endsWith(",")) {
             line = line.substring(0, line.length() - 1);
         }
 
         String[] parts = line.split("\"");
-        return parts[parts.length - 2];
+
+        if (parts.length >= 4) {
+            value = parts[3];
+        }
+
+        return value;
     }
 }
 
