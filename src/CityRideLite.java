@@ -14,6 +14,7 @@ import java.io.IOException;
 import java.time.LocalDateTime;
 import java.io.BufferedReader;
 import java.io.FileReader;
+import java.time.LocalTime;
 
 public class CityRideLite {
 
@@ -23,11 +24,11 @@ public class CityRideLite {
         sc.close();
     }
 
-    // Creates all objects, loads config, then routes to rider or admin
     private static void startApp(Scanner sc) {
         JsonFileHandler jsonFileHandler = new JsonFileHandler();
         ConfigManager configManager = new ConfigManager();
-        SystemConfig config = configManager.loadConfig(jsonFileHandler);
+        configManager.loadConfig(jsonFileHandler);
+
 
         JourneyManager manager = new JourneyManager();
         SummaryReport summaryReport = new SummaryReport();
@@ -56,7 +57,7 @@ public class CityRideLite {
         System.out.println("Goodbye!");
     }
 
-    // Reads and validates the role selection from the user
+
     private static int readRoleChoice(Scanner sc) {
         System.out.println("\n=== CityRide Lite ===");
         System.out.println("1. Rider");
@@ -66,7 +67,7 @@ public class CityRideLite {
         return InputHelper.readIntInRange(sc, "Enter your choice: ", 0, 2);
     }
 
-    // Opens the rider flow - passes all dependencies to the rider menu
+
     private static void openRiderFlow(Scanner sc, JourneyManager manager, SummaryReport summaryReport,
                                       ProfileManager profileManager, ReportExporter reportExporter,
                                       CsvFileHandler csvFileHandler, JsonFileHandler jsonFileHandler,
@@ -75,7 +76,7 @@ public class CityRideLite {
                 reportExporter, csvFileHandler, jsonFileHandler, configManager);
     }
 
-    // Opens the admin flow - passes all dependencies to the admin menu
+
     private static void openAdminFlow(Scanner sc, AdminMenu adminMenu,
                                       ConfigManager configManager, JsonFileHandler jsonFileHandler) {
         adminMenu.showMenu(sc, configManager, jsonFileHandler);
@@ -89,7 +90,6 @@ class FareCalculator {
                                      CityRideDataset.PassengerType type) {
 
         BigDecimal result = BigDecimal.ZERO;
-
         BigDecimal baseFare = config.getBaseFare(fromZone, toZone, band);
 
         if (baseFare != null) {
@@ -98,14 +98,15 @@ class FareCalculator {
             if (discountRate != null) {
                 BigDecimal discountAmount = baseFare.multiply(discountRate);
                 BigDecimal discounted = baseFare.subtract(discountAmount);
-                result = money(discounted);
+                result = MoneyUtil.money(discounted);
             }
         }
 
         return result;
     }
 
-    public BigDecimal applyCap(SystemConfig config, BigDecimal runningTotal, BigDecimal discountedFare,
+    public BigDecimal applyCap(SystemConfig config, BigDecimal runningTotal,
+                               BigDecimal discountedFare,
                                CityRideDataset.PassengerType type) {
 
         BigDecimal result = BigDecimal.ZERO;
@@ -113,23 +114,21 @@ class FareCalculator {
 
         if (cap != null) {
             if (runningTotal.compareTo(cap) >= 0) {
-                result = money(BigDecimal.ZERO);
-            } else {
+                result = MoneyUtil.money(BigDecimal.ZERO);
+            }
+            else {
                 BigDecimal remaining = cap.subtract(runningTotal);
 
                 if (discountedFare.compareTo(remaining) > 0) {
-                    result = money(remaining);
-                } else {
-                    result = money(discountedFare);
+                    result = MoneyUtil.money(remaining);
+                }
+                else {
+                    result = MoneyUtil.money(discountedFare);
                 }
             }
         }
 
         return result;
-    }
-
-    private BigDecimal money(BigDecimal value) {
-        return value.setScale(2, RoundingMode.HALF_UP);
     }
 }
 
@@ -145,22 +144,6 @@ class JourneyManager {
         nextID = 1;
     }
 
-    public Journey findJourneyById(int id) {
-        Journey foundJourney = null;
-
-        int i = 0;
-        while (i < journeys.size() && foundJourney == null) {
-            Journey currentJourney = journeys.get(i);
-
-            if (currentJourney.getId() == id) {
-                foundJourney = currentJourney;
-            }
-
-            i++;
-        }
-
-        return foundJourney;
-    }
 
     private List<Journey> getJourneysForDateAndType(LocalDate date, CityRideDataset.PassengerType type) {
         List<Journey> result = new ArrayList<>();
@@ -177,20 +160,6 @@ class JourneyManager {
         }
 
         return result;
-    }
-    public void appendJourneys(List<Journey> importedJourneys) {
-        int i = 0;
-
-        while (i < importedJourneys.size()) {
-            Journey journey = importedJourneys.get(i);
-            journeys.add(journey);
-
-            if (journey.getId() >= nextID) {
-                nextID = journey.getId() + 1;
-            }
-
-            i++;
-        }
     }
 
     public void recalculateChargedFaresForDay(LocalDate date, CityRideDataset.PassengerType type, SystemConfig config) {
@@ -291,7 +260,7 @@ class JourneyManager {
             BigDecimal discountedFare = calc.discountedFare(config, j.getFromZone(), j.getToZone(), j.getBand(), j.getType());
             j.setBaseFare(baseFare);
             j.setDiscountedFare(discountedFare);
-            j.setDiscountApplied(baseFare.subtract(discountedFare).setScale(2, RoundingMode.HALF_UP));
+            j.setDiscountApplied(MoneyUtil.money(baseFare.subtract(discountedFare)));
         }
     }
     public void setJourneys(List<Journey> newJourneys) {
@@ -412,11 +381,6 @@ class ProfileManager {
         return currentProfile;
     }
 
-    public void setCurrentProfile(RiderProfile profile) {
-
-        currentProfile = profile;
-    }
-
     public boolean hasCurrentProfile() {
         boolean hasProfile = false;
 
@@ -429,6 +393,7 @@ class ProfileManager {
 }
 
 class RiderMenu {
+    private LocalDate activeDate;
 
     public void showMenu(Scanner sc, JourneyManager manager, SummaryReport summaryReport,
                          ProfileManager profileManager, ReportExporter reportExporter,
@@ -438,6 +403,7 @@ class RiderMenu {
         profileSetupUI(sc, profileManager, jsonFileHandler, manager, csvFileHandler);
 
         if (profileManager.hasCurrentProfile()) {
+            chooseActiveDateUI(sc);
 
             journeyMenuUI(sc, manager, summaryReport, profileManager,
                     reportExporter, csvFileHandler, configManager);
@@ -445,6 +411,13 @@ class RiderMenu {
             saveProfileBeforeExitUI(sc, profileManager, jsonFileHandler);
             saveJourneysBeforeExitUI(sc, manager, csvFileHandler, profileManager);
         }
+    }
+
+    private void chooseActiveDateUI(Scanner sc) {
+        System.out.println("\n=== Active Day ===");
+        activeDate = InputHelper.readDate(sc,
+                "Enter active date (DD-MM-YYYY, e.g. 22-04-2026): ");
+        System.out.println("Active day set to: " + activeDate);
     }
 
     private void profileSetupUI(Scanner sc, ProfileManager profileManager,
@@ -458,7 +431,7 @@ class RiderMenu {
             System.out.println("2. Load existing profile");
             System.out.println("0. Back");
 
-            choice = InputHelper.readIntInRange(sc, "Enter your choice: ", 0, 2);
+            choice = InputHelper.readIntInRange(sc, "Enter your choice (0-2, e.g. 1): ", 0, 2);
 
             if (choice == 1) {
                 createProfileUI(sc, profileManager, jsonFileHandler, manager);
@@ -469,10 +442,11 @@ class RiderMenu {
 
         } while (choice != 0 && !profileManager.hasCurrentProfile());
     }
+
     private void createProfileUI(Scanner sc, ProfileManager profileManager,
                                  JsonFileHandler jsonFileHandler, JourneyManager manager) {
         System.out.println("\n=== Create Profile ===");
-        String name = InputHelper.readRequiredText(sc, "Enter your name: ");
+        String name = InputHelper.readRequiredText(sc, "Enter your name (e.g. Ali Khan): ");
         CityRideDataset.PassengerType type = InputHelper.readPassengerType(sc,
                 "Enter passenger type (ADULT/STUDENT/CHILD/SENIOR_CITIZEN): ");
         RiderProfile.PaymentOption payment = InputHelper.readPaymentOption(sc,
@@ -531,6 +505,7 @@ class RiderMenu {
         do {
             String name = profileManager.getCurrentProfile().getName();
             System.out.println("\n=== Journey Menu ===");
+            System.out.println("Active day: " + activeDate);
             System.out.println("Welcome, " + name + "!");
             System.out.println("1. Add journey");
             System.out.println("2. Edit journey");
@@ -538,9 +513,10 @@ class RiderMenu {
             System.out.println("4. List journeys");
             System.out.println("5. View running totals");
             System.out.println("6. Summary and Reports");
+            System.out.println("7. Change active day");
             System.out.println("0. Exit");
 
-            choice = InputHelper.readIntInRange(sc, "Choose an option (0-6): ", 0, 6);
+            choice = InputHelper.readIntInRange(sc, "Choose an option (0-7, e.g. 1): ", 0, 7);
 
             switch (choice) {
                 case 1:
@@ -556,22 +532,36 @@ class RiderMenu {
                     listJourneysUI(manager);
                     break;
                 case 5:
-                    showRunningTotalsUI(manager, profileManager, configManager, sc);
+                    showRunningTotalsUI(manager, profileManager, configManager);
                     break;
                 case 6:
-                    summaryAndReportsMenuUI(sc, manager, summaryReport, profileManager, reportExporter, csvFileHandler);
+                    summaryAndReportsMenuUI(sc, manager, summaryReport, profileManager,
+                            reportExporter, csvFileHandler);
+                    break;
+                case 7:
+                    chooseActiveDateUI(sc);
                     break;
             }
 
         } while (choice != 0);
     }
 
-    private void addJourneyUI(Scanner sc, JourneyManager manager, ProfileManager profileManager, ConfigManager configManager) {
+    private void addJourneyUI(Scanner sc, JourneyManager manager,
+                              ProfileManager profileManager, ConfigManager configManager) {
         System.out.println("\n=== Add Journey ===");
-        LocalDateTime dateTime = InputHelper.readDateTime(sc, "Enter date and time (DD-MM-YYYY HH:mm, e.g. 22-04-2026 08:30): ");
-        int fromZone = InputHelper.readIntInRange(sc, "Enter from zone (1-5): ", 1, 5);
-        int toZone = InputHelper.readIntInRange(sc, "Enter to zone (1-5): ", 1, 5);
-        CityRideDataset.TimeBand band = InputHelper.readTimeBand(sc, "Enter time band (PEAK/OFF-PEAK): ");
+        System.out.println("Active day: " + activeDate);
+
+        LocalTime time = InputHelper.readTime(sc, "Enter time (HH:mm, e.g. 08:30): ");
+        LocalDateTime dateTime = LocalDateTime.of(activeDate, time);
+
+        int fromZone = InputHelper.readIntInRange(sc, "Enter from zone (1-5, e.g. 2): ", 1, 5);
+        int toZone = InputHelper.readIntInRange(sc, "Enter to zone (1-5, e.g. 4): ", 1, 5);
+
+        CityRideDataset.TimeBand band =
+                configManager.determineBand(dateTime, configManager.getCurrentConfig());
+
+        System.out.println("Time band: " + band + " (set automatically from journey time)");
+
         CityRideDataset.PassengerType type = profileManager.getCurrentProfile().getPassengerType();
         boolean added = manager.addJourney(dateTime, fromZone, toZone, band, type, configManager.getCurrentConfig());
 
@@ -585,25 +575,40 @@ class RiderMenu {
 
     private void editJourneyUI(Scanner sc, JourneyManager manager, ConfigManager configManager) {
         System.out.println("\n=== Edit Journey ===");
+        System.out.println("Active day: " + activeDate);
 
-        if (manager.getJourneys().isEmpty()) {
-            System.out.println("No journeys to edit.");
+        List<Journey> dayJourneys = getJourneysForActiveDay(manager);
+
+        if (dayJourneys.isEmpty()) {
+            System.out.println("No journeys to edit for the active day.");
         }
         else {
-            listJourneysUI(manager);
-            int id = InputHelper.readIntInRange(sc, "Enter journey ID to edit: ", 1, 999);
-            Journey j = manager.findJourneyById(id);
+            printJourneys(dayJourneys);
+
+            int id = InputHelper.readIntInRange(sc, "Enter journey ID to edit (e.g. 3): ", 1, 999);
+            Journey j = findActiveDayJourneyById(manager, id);
 
             if (j == null) {
-                System.out.println("ERROR: No journey found with ID=" + id);
+                System.out.println("ERROR: No journey found with ID=" + id + " for the active day.");
             }
             else {
-                j.setDateTime(InputHelper.readDateTime(sc, "Enter new date and time (DD-MM-YYYY HH:mm): "));
-                j.setFromZone(InputHelper.readIntInRange(sc, "Enter new from zone (1-5): ", 1, 5));
-                j.setToZone(InputHelper.readIntInRange(sc, "Enter new to zone (1-5): ", 1, 5));
-                j.setBand(InputHelper.readTimeBand(sc, "Enter new time band (PEAK/OFF-PEAK): "));
+                LocalDate oldDate = j.getDate();
+                LocalTime newTime = InputHelper.readTime(sc, "Enter new time (HH:mm, e.g. 09:15): ");
+                LocalDateTime newDateTime = LocalDateTime.of(activeDate, newTime);
+                CityRideDataset.TimeBand newBand =
+                        configManager.determineBand(newDateTime, configManager.getCurrentConfig());
+
+                System.out.println("Time band: " + newBand + " (set automatically from journey time)");
+
+                j.setDateTime(newDateTime);
+                j.setBand(newBand);
+                j.setFromZone(InputHelper.readIntInRange(sc, "Enter new from zone (1-5, e.g. 2): ", 1, 5));
+                j.setToZone(InputHelper.readIntInRange(sc, "Enter new to zone (1-5, e.g. 4): ", 1, 5));
+
                 manager.recalculateFaresForJourney(j, configManager.getCurrentConfig());
+                manager.recalculateChargedFaresForDay(oldDate, j.getType(), configManager.getCurrentConfig());
                 manager.recalculateChargedFaresForDay(j.getDate(), j.getType(), configManager.getCurrentConfig());
+
                 System.out.println("Journey updated successfully.");
             }
         }
@@ -611,62 +616,115 @@ class RiderMenu {
 
     private void deleteJourneyUI(Scanner sc, JourneyManager manager, ConfigManager configManager) {
         System.out.println("\n=== Delete Journey ===");
+        System.out.println("Active day: " + activeDate);
 
-        if (manager.getJourneys().isEmpty()) {
-            System.out.println("No journeys to delete.");
+        List<Journey> dayJourneys = getJourneysForActiveDay(manager);
+
+        if (dayJourneys.isEmpty()) {
+            System.out.println("No journeys to delete for the active day.");
         }
         else {
-            listJourneysUI(manager);
-            int id = InputHelper.readIntInRange(sc, "Enter journey ID to delete: ", 1, 999);
-            boolean confirm = InputHelper.readYesNo(sc, "Confirm delete journey ID=" + id + "? (Y/N): ");
+            printJourneys(dayJourneys);
 
-            if (confirm) {
-                boolean removed = manager.removeJourneyById(id, configManager.getCurrentConfig());
-                if (removed) {
-                    System.out.println("Journey deleted and fares recalculated.");
-                }
-                else {
-                    System.out.println("ERROR: No journey found with ID=" + id);
-                }
+            int id = InputHelper.readIntInRange(sc, "Enter journey ID to delete (e.g. 2): ", 1, 999);
+            Journey j = findActiveDayJourneyById(manager, id);
+
+            if (j == null) {
+                System.out.println("ERROR: No journey found with ID=" + id + " for the active day.");
             }
             else {
-                System.out.println("Deletion cancelled.");
+                boolean confirm = InputHelper.readYesNo(sc,
+                        "Confirm delete journey ID=" + id + " for " + activeDate + "? (Y/N): ");
+
+                if (confirm) {
+                    boolean removed = manager.removeJourneyById(id, configManager.getCurrentConfig());
+
+                    if (removed) {
+                        System.out.println("Journey deleted and fares recalculated.");
+                    }
+                    else {
+                        System.out.println("ERROR: No journey found with ID=" + id);
+                    }
+                }
+                else {
+                    System.out.println("Deletion cancelled.");
+                }
             }
         }
     }
 
     private void listJourneysUI(JourneyManager manager) {
         System.out.println("\n=== Journey List ===");
+        System.out.println("Active day: " + activeDate);
 
-        if (manager.getJourneys().isEmpty()) {
-            System.out.println("No journeys recorded.");
+        List<Journey> dayJourneys = getJourneysForActiveDay(manager);
+
+        if (dayJourneys.isEmpty()) {
+            System.out.println("No journeys recorded for the active day.");
         }
         else {
-            int i = 0;
-            while (i < manager.getJourneys().size()) {
-                System.out.println(manager.getJourneys().get(i));
-                i++;
+            printJourneys(dayJourneys);
+        }
+    }
+
+    private List<Journey> getJourneysForActiveDay(JourneyManager manager) {
+        List<Journey> result = new ArrayList<>();
+
+        int i = 0;
+        while (i < manager.getJourneys().size()) {
+            Journey j = manager.getJourneys().get(i);
+
+            if (j.getDate().equals(activeDate)) {
+                result.add(j);
             }
+
+            i++;
+        }
+
+        return result;
+    }
+
+    private Journey findActiveDayJourneyById(JourneyManager manager, int id) {
+        Journey found = null;
+        List<Journey> dayJourneys = getJourneysForActiveDay(manager);
+
+        int i = 0;
+        while (i < dayJourneys.size() && found == null) {
+            if (dayJourneys.get(i).getId() == id) {
+                found = dayJourneys.get(i);
+            }
+            i++;
+        }
+
+        return found;
+    }
+
+    private void printJourneys(List<Journey> journeys) {
+        int i = 0;
+        while (i < journeys.size()) {
+            System.out.println(journeys.get(i));
+            i++;
         }
     }
 
     private void showRunningTotalsUI(JourneyManager manager, ProfileManager profileManager,
-                                     ConfigManager configManager, Scanner sc) {
+                                     ConfigManager configManager) {
         System.out.println("\n=== Running Totals ===");
+        System.out.println("Active day: " + activeDate);
 
-        if (manager.getJourneys().isEmpty()) {
-            System.out.println("No journeys recorded yet.");
+        List<Journey> dayJourneys = getJourneysForActiveDay(manager);
+
+        if (dayJourneys.isEmpty()) {
+            System.out.println("No journeys recorded yet for the active day.");
         }
         else {
-            LocalDate date = InputHelper.readDateTime(sc,
-                    "Enter date to view totals (DD-MM-YYYY HH:mm, e.g. 22-04-2026 08:30): ").toLocalDate();
             CityRideDataset.PassengerType type = profileManager.getCurrentProfile().getPassengerType();
-            BigDecimal total = manager.getTotalChargedForDay(date, type);
+            BigDecimal total = manager.getTotalChargedForDay(activeDate, type);
             BigDecimal cap = configManager.getCurrentConfig().getDailyCap(type);
 
             System.out.println("Passenger type: " + type);
-            System.out.println("Total charged: GBP " + total.setScale(2, RoundingMode.HALF_UP));
-            System.out.println("Daily cap: GBP " + cap.setScale(2, RoundingMode.HALF_UP));
+            System.out.println("Total charged: GBP " + MoneyUtil.money(total));
+            System.out.println("Daily cap: GBP " + MoneyUtil.money(cap));
 
             if (total.compareTo(cap) >= 0) {
                 System.out.println("Cap reached: Yes");
@@ -684,17 +742,18 @@ class RiderMenu {
 
         do {
             System.out.println("\n=== Summary and Reports ===");
+            System.out.println("Active day: " + activeDate);
             System.out.println("1. Show daily summary");
             System.out.println("2. Import journeys from CSV");
-            System.out.println("3. Export journeys to CSV");
-            System.out.println("4. Export summary report");
+            System.out.println("3. Export active day journeys to CSV");
+            System.out.println("4. Export active day summary");
             System.out.println("0. Back");
 
-            choice = InputHelper.readIntInRange(sc, "Choose an option (0-4): ", 0, 4);
+            choice = InputHelper.readIntInRange(sc, "Choose an option (0-4, e.g. 1): ", 0, 4);
 
             switch (choice) {
                 case 1:
-                    showSummaryUI(sc, manager, summaryReport);
+                    showSummaryUI(manager, summaryReport);
                     break;
                 case 2:
                     importJourneysUI(manager, csvFileHandler, profileManager);
@@ -703,17 +762,17 @@ class RiderMenu {
                     exportJourneysUI(manager, csvFileHandler, profileManager);
                     break;
                 case 4:
-                    exportSummaryUI(sc, manager, summaryReport, reportExporter, profileManager);
+                    exportSummaryUI(manager, summaryReport, reportExporter, profileManager);
                     break;
             }
 
         } while (choice != 0);
     }
 
-    private void showSummaryUI(Scanner sc, JourneyManager manager, SummaryReport summaryReport) {
+    private void showSummaryUI(JourneyManager manager, SummaryReport summaryReport) {
         System.out.println("\n=== Daily Summary ===");
-        LocalDate date = InputHelper.readDateTime(sc, "Enter date (DD-MM-YYYY HH:mm, e.g. 22-04-2026 08:30): ").toLocalDate();
-        summaryReport.printSummary(manager, date);
+        System.out.println("Active day: " + activeDate);
+        summaryReport.printSummary(manager, activeDate);
     }
 
     private void importJourneysUI(JourneyManager manager, CsvFileHandler csvFileHandler,
@@ -736,15 +795,17 @@ class RiderMenu {
                                   ProfileManager profileManager) {
         System.out.println("\n=== Export Journeys ===");
 
-        if (manager.getJourneys().isEmpty()) {
-            System.out.println("No journeys to export.");
+        List<Journey> dayJourneys = getJourneysForActiveDay(manager);
+
+        if (dayJourneys.isEmpty()) {
+            System.out.println("No journeys to export for the active day.");
         }
         else {
             String filePath = profileManager.getCurrentProfile().getProfileId() + "_journeys.csv";
-            boolean success = csvFileHandler.exportJourneys(filePath, manager.getJourneys());
+            boolean success = csvFileHandler.exportJourneys(filePath, dayJourneys);
 
             if (success) {
-                System.out.println("Journeys exported to " + filePath);
+                System.out.println("Active day journeys exported to " + filePath);
             }
             else {
                 System.out.println("ERROR: Could not export journeys.");
@@ -752,17 +813,15 @@ class RiderMenu {
         }
     }
 
-    private void exportSummaryUI(Scanner sc, JourneyManager manager, SummaryReport summaryReport,
+    private void exportSummaryUI(JourneyManager manager, SummaryReport summaryReport,
                                  ReportExporter reportExporter, ProfileManager profileManager) {
         System.out.println("\n=== Export Summary ===");
-
-        LocalDate date = InputHelper.readDateTime(sc,
-                "Enter date (DD-MM-YYYY HH:mm, e.g. 22-04-2026 08:30): ").toLocalDate();
+        System.out.println("Active day: " + activeDate);
 
         String riderName = profileManager.getCurrentProfile().getName();
-        String filePath = buildSummaryFileName(profileManager, date);
+        String filePath = buildSummaryFileName(profileManager, activeDate);
 
-        boolean success = reportExporter.exportSummaryAsText(filePath, riderName, date, summaryReport, manager);
+        boolean success = reportExporter.exportSummaryAsText(filePath, riderName, activeDate, summaryReport, manager);
 
         if (success) {
             System.out.println("Summary exported to " + filePath);
@@ -771,7 +830,6 @@ class RiderMenu {
             System.out.println("ERROR: Could not export summary.");
         }
     }
-
 
     private void saveProfileBeforeExitUI(Scanner sc, ProfileManager profileManager,
                                          JsonFileHandler jsonFileHandler) {
@@ -791,20 +849,22 @@ class RiderMenu {
     private void saveJourneysBeforeExitUI(Scanner sc, JourneyManager manager,
                                           CsvFileHandler csvFileHandler,
                                           ProfileManager profileManager) {
-        boolean save = InputHelper.readYesNo(sc, "Save today's journeys? (Y/N): ");
+        boolean save = InputHelper.readYesNo(sc, "Save active day journeys? (Y/N): ");
 
         if (save) {
+            List<Journey> dayJourneys = getJourneysForActiveDay(manager);
             String fileName = profileManager.getCurrentProfile().getProfileId() + "_journeys.csv";
-            boolean success = csvFileHandler.exportJourneys(fileName, manager.getJourneys());
+            boolean success = csvFileHandler.exportJourneys(fileName, dayJourneys);
 
             if (success) {
-                System.out.println("Journeys saved to " + fileName);
+                System.out.println("Journeys for " + activeDate + " saved to " + fileName);
             }
             else {
                 System.out.println("ERROR: Could not save journeys.");
             }
         }
     }
+
     private String buildSummaryFileName(ProfileManager profileManager, LocalDate date) {
         DateTimeFormatter dateFormat = DateTimeFormatter.ofPattern("dd-MM-yyyy");
 
@@ -863,16 +923,26 @@ class ConfigManager {
         return config;
     }
 
+    public CityRideDataset.TimeBand determineBand(LocalDateTime dateTime, SystemConfig config) {
+        CityRideDataset.TimeBand band = CityRideDataset.TimeBand.OFF_PEAK;
+
+        LocalTime journeyTime = dateTime.toLocalTime();
+        LocalTime peakStart = LocalTime.parse(config.getPeakStart());
+        LocalTime peakEnd = LocalTime.parse(config.getPeakEnd());
+
+        if (!journeyTime.isBefore(peakStart) && journeyTime.isBefore(peakEnd)) {
+            band = CityRideDataset.TimeBand.PEAK;
+        }
+
+        return band;
+    }
+
     public boolean saveConfig(SystemConfig config, JsonFileHandler jsonFileHandler) {
         return jsonFileHandler.saveConfig("config.json", config);
     }
 
     public SystemConfig getCurrentConfig() {
         return currentConfig;
-    }
-
-    public void setCurrentConfig(SystemConfig config) {
-        currentConfig = config;
     }
 
     public void updateBaseFare(int fromZone, int toZone, CityRideDataset.TimeBand band, BigDecimal fare) {
@@ -1334,7 +1404,7 @@ class JsonFileHandler {
 
 class SystemConfig {
 
-    // Stores base fares using the same key format as CityRideDataset: "from-to-BAND"
+
     private Map<String, BigDecimal> baseFares;
     private Map<CityRideDataset.PassengerType, BigDecimal> discounts;
     private Map<CityRideDataset.PassengerType, BigDecimal> dailyCaps;
@@ -1545,7 +1615,8 @@ class AdminMenu {
 
             if (choice == 1) {
                 updateBaseFareUI(sc, configManager, jsonFileHandler);
-            } else if (choice == 2) {
+            }
+            else if (choice == 2) {
                 resetBaseFareUI(sc, configManager, jsonFileHandler);
             }
         } while (choice != 0);
@@ -1592,10 +1663,12 @@ class AdminMenu {
 
             if (choice == 1) {
                 updateDiscountUI(sc, configManager, jsonFileHandler);
-            } else if (choice == 2) {
+            }
+            else if (choice == 2) {
                 resetDiscountUI(sc, configManager, jsonFileHandler);
             }
-        } while (choice != 0);
+        }
+        while (choice != 0);
     }
 
     private void updateDiscountUI(Scanner sc, ConfigManager configManager, JsonFileHandler jsonFileHandler) {
@@ -1640,10 +1713,12 @@ class AdminMenu {
 
             if (choice == 1) {
                 updateDailyCapUI(sc, configManager, jsonFileHandler);
-            } else if (choice == 2) {
+            }
+            else if (choice == 2) {
                 resetDailyCapUI(sc, configManager, jsonFileHandler);
             }
-        } while (choice != 0);
+        }
+        while (choice != 0);
     }
 
 
@@ -1689,10 +1764,12 @@ class AdminMenu {
 
             if (choice == 1) {
                 updatePeakWindowUI(sc, configManager, jsonFileHandler);
-            } else if (choice == 2) {
+            }
+            else if (choice == 2) {
                 resetPeakWindowUI(configManager, jsonFileHandler);
             }
-        } while (choice != 0);
+        }
+        while (choice != 0);
     }
 
 
@@ -1705,7 +1782,8 @@ class AdminMenu {
 
         if (peakStart.compareTo(peakEnd) >= 0) {
             System.out.println("ERROR: Start time must be before end time. No changes saved.");
-        } else {
+        }
+        else {
             configManager.updatePeakWindow(peakStart, peakEnd);
             saveAndReport(configManager, jsonFileHandler);
         }
@@ -1727,7 +1805,8 @@ class AdminMenu {
 
         if (saved) {
             System.out.println("Changes saved successfully.");
-        } else {
+        }
+        else {
             System.out.println("ERROR: Could not save config.");
         }
     }
@@ -1749,7 +1828,6 @@ class SummaryReport {
         BigDecimal mostExpensiveFare = BigDecimal.ZERO;
     }
 
-    // Loops through journeys and fills in all summary values for the given date
     private SummaryData calculateSummaryData(JourneyManager manager, LocalDate date) {
         SummaryData data = new SummaryData();
         List<Journey> list = manager.getJourneys();
@@ -1780,6 +1858,7 @@ class SummaryReport {
                 if (isValidZone(fromZone) && isValidZone(toZone)) {
                     data.zonePairCounts[fromZone][toZone]++;
                     data.zoneCounts[fromZone]++;
+
                     if (fromZone != toZone) {
                         data.zoneCounts[toZone]++;
                     }
@@ -1794,38 +1873,40 @@ class SummaryReport {
         }
 
         data.savings = calculateSavings(manager, date);
+
         return data;
     }
 
-
-    // Prints the daily summary to the console
     public void printSummary(JourneyManager manager, LocalDate date) {
         SummaryData data = calculateSummaryData(manager, date);
-        System.out.println(buildSummaryText(manager, date));
+        System.out.println(buildSummaryText(data, date));
         printZonePairCounts(data.zonePairCounts);
         printZoneCounts(data.zoneCounts);
     }
 
-    // Builds summary as a text string so ReportExporter can write it to a file
     public String buildSummaryText(JourneyManager manager, LocalDate date) {
         SummaryData data = calculateSummaryData(manager, date);
+        return buildSummaryText(data, date);
+    }
+
+    private String buildSummaryText(SummaryData data, LocalDate date) {
         String result = "";
 
         result = result + "=== CityRide Lite Daily Summary ===" + "\n";
         result = result + "Date: " + date + "\n";
         result = result + "Total journeys: " + data.totalJourneys + "\n";
-        result = result + "Total charged: GBP " + money(data.totalCharged) + "\n";
-        result = result + "Average cost per journey: GBP " + money(data.average) + "\n";
+        result = result + "Total charged: GBP " + MoneyUtil.money(data.totalCharged) + "\n";
+        result = result + "Average cost per journey: GBP " + MoneyUtil.money(data.average) + "\n";
 
         if (data.mostExpensiveId == -1) {
             result = result + "Most expensive journey: none" + "\n";
         }
         else {
             result = result + "Most expensive journey: ID " + data.mostExpensiveId
-                    + " (GBP " + money(data.mostExpensiveFare) + ")" + "\n";
+                    + " (GBP " + MoneyUtil.money(data.mostExpensiveFare) + ")" + "\n";
         }
 
-        result = result + "Savings from cap: GBP " + money(data.savings) + "\n";
+        result = result + "Savings from cap: GBP " + MoneyUtil.money(data.savings) + "\n";
 
         if (data.savings.compareTo(BigDecimal.ZERO) > 0) {
             result = result + "Cap reached: Yes" + "\n";
@@ -1840,8 +1921,6 @@ class SummaryReport {
         return result;
     }
 
-    // Calculates total savings from cap for a given date
-    // Saving per journey = discounted fare minus what was actually charged
     private BigDecimal calculateSavings(JourneyManager manager, LocalDate date) {
         BigDecimal savings = BigDecimal.ZERO;
         List<Journey> list = manager.getJourneys();
@@ -1849,16 +1928,17 @@ class SummaryReport {
         int i = 0;
         while (i < list.size()) {
             Journey j = list.get(i);
+
             if (j.getDate().equals(date)) {
                 savings = savings.add(j.getDiscountedFare().subtract(j.getChargedFare()));
             }
+
             i++;
         }
 
-        return money(savings);
+        return MoneyUtil.money(savings);
     }
 
-    // Prints zone pair counts to the console
     private void printZonePairCounts(int[][] zonePairCounts) {
         System.out.println("\nZone pair counts:");
         boolean hasAny = false;
@@ -1871,8 +1951,10 @@ class SummaryReport {
                     System.out.println(from + "->" + to + ": " + zonePairCounts[from][to]);
                     hasAny = true;
                 }
+
                 to++;
             }
+
             from++;
         }
 
@@ -1881,7 +1963,6 @@ class SummaryReport {
         }
     }
 
-    // Prints zone involvement counts to the console
     private void printZoneCounts(int[] zoneCounts) {
         System.out.println("\nZone counts:");
         boolean hasAny = false;
@@ -1892,6 +1973,7 @@ class SummaryReport {
                 System.out.println("Zone " + zone + ": " + zoneCounts[zone]);
                 hasAny = true;
             }
+
             zone++;
         }
 
@@ -1900,18 +1982,14 @@ class SummaryReport {
         }
     }
 
-    // Checks if a zone number is within the valid dataset range
     private boolean isValidZone(int zone) {
         boolean valid = false;
+
         if (zone >= CityRideDataset.MIN_ZONE && zone <= CityRideDataset.MAX_ZONE) {
             valid = true;
         }
-        return valid;
-    }
 
-    // Rounds a money value to 2 decimal places for consistent display
-    private BigDecimal money(BigDecimal value) {
-        return value.setScale(2, RoundingMode.HALF_UP);
+        return valid;
     }
 }
 
@@ -1948,7 +2026,7 @@ class Journey {
         this.type = type;
         this.baseFare = baseFare;
         this.discountedFare = discountedFare;
-        this.discountApplied = baseFare.subtract(discountedFare).setScale(2, RoundingMode.HALF_UP);
+        this.discountApplied = MoneyUtil.money(baseFare.subtract(discountedFare));
         this.chargedFare = chargedFare;
     }
 
@@ -2018,10 +2096,6 @@ class Journey {
         this.band = band;
     }
 
-    public void setType(CityRideDataset.PassengerType type) {
-        this.type = type;
-    }
-
     public void setBaseFare(BigDecimal baseFare) {
         this.baseFare = baseFare;
     }
@@ -2052,14 +2126,9 @@ class Journey {
     }
 }
 
-class Money {
-
-    public static BigDecimal toMoney(BigDecimal value) {
+class MoneyUtil {
+    public static BigDecimal money(BigDecimal value) {
         return value.setScale(2, RoundingMode.HALF_UP);
-    }
-
-    public static String formatMoney(BigDecimal value) {
-        return value.setScale(2, RoundingMode.HALF_UP).toPlainString();
     }
 }
 
@@ -2098,6 +2167,31 @@ class InputHelper {
         }
 
         return value;
+    }
+    public static LocalTime readTime(Scanner scanner, String prompt) {
+        DateTimeFormatter timeFormat = DateTimeFormatter.ofPattern("HH:mm");
+        boolean valid = false;
+        LocalTime time = LocalTime.now();
+
+        while (!valid) {
+            System.out.print(prompt);
+            String input = scanner.nextLine().trim();
+
+            if (input.isEmpty()) {
+                System.out.println("Input cannot be blank.");
+            }
+            else {
+                try {
+                    time = LocalTime.parse(input, timeFormat);
+                    valid = true;
+                }
+                catch (DateTimeParseException e) {
+                    System.out.println("Invalid time. Use HH:mm (e.g. 08:30).");
+                }
+            }
+        }
+
+        return time;
     }
 
     public static boolean readYesNo(Scanner scanner, String prompt) {
@@ -2141,31 +2235,6 @@ class InputHelper {
         }
 
         return text;
-    }
-
-    public static LocalDateTime readDateTime(Scanner scanner, String prompt) {
-        boolean valid = false;
-        LocalDateTime dateTime = LocalDateTime.now();
-
-        while (!valid) {
-            System.out.print(prompt);
-            String input = scanner.nextLine().trim();
-
-            if (input.isEmpty()) {
-                System.out.println("Input cannot be blank.");
-            }
-            else {
-                try {
-                    dateTime = LocalDateTime.parse(input, DATE_TIME_FORMAT);
-                    valid = true;
-                }
-                catch (DateTimeParseException e) {
-                    System.out.println("Invalid date and time. Use DD-MM-YYYY HH:mm.");
-                }
-            }
-        }
-
-        return dateTime;
     }
 
     public static CityRideDataset.TimeBand readTimeBand(Scanner scanner, String prompt) {
@@ -2334,6 +2403,31 @@ class InputHelper {
         }
 
         return time;
+    }
+    public static LocalDate readDate(Scanner scanner, String prompt) {
+        DateTimeFormatter dateFormat = DateTimeFormatter.ofPattern("dd-MM-yyyy");
+        boolean valid = false;
+        LocalDate date = LocalDate.now();
+
+        while (!valid) {
+            System.out.print(prompt);
+            String input = scanner.nextLine().trim();
+
+            if (input.isEmpty()) {
+                System.out.println("Input cannot be blank.");
+            }
+            else {
+                try {
+                    date = LocalDate.parse(input, dateFormat);
+                    valid = true;
+                }
+                catch (DateTimeParseException e) {
+                    System.out.println("Invalid date. Use DD-MM-YYYY (e.g. 22-04-2026).");
+                }
+            }
+        }
+
+        return date;
     }
 }
 
