@@ -505,7 +505,7 @@ class RiderMenu {
             System.out.println("2. Edit journey");
             System.out.println("3. Delete journey");
             System.out.println("4. List journeys");
-            System.out.println("5. View running totals");
+            System.out.println("5. Calculate/View running totals");
             System.out.println("6. Summary and Reports");
             System.out.println("7. Change active day");
             System.out.println("0. Exit");
@@ -1667,16 +1667,17 @@ class AdminMenu {
         int choice;
         do {
             System.out.println("\n=== Manage Base Fares ===");
-            System.out.println("1. Update a base fare");
-            System.out.println("2. Reset a base fare to default");
+            System.out.println("1. Add a base fare");
+            System.out.println("2. Update a base fare");
+            System.out.println("3. Delete a base fare (restore default)");
             System.out.println("0. Back");
 
-            choice = InputHelper.readIntInRange(sc, "Choose an option (0-2): ", 0, 2);
+            choice = InputHelper.readIntInRange(sc, "Choose an option (0-3): ", 0, 3);
 
-            if (choice == 1) {
+            if (choice == 1 || choice == 2) {
                 updateBaseFareUI(sc, configManager, jsonFileHandler);
             }
-            else if (choice == 2) {
+            else if (choice == 3) {
                 resetBaseFareUI(sc, configManager, jsonFileHandler);
             }
         } while (choice != 0);
@@ -1684,11 +1685,11 @@ class AdminMenu {
 
 
     private void updateBaseFareUI(Scanner sc, ConfigManager configManager, JsonFileHandler jsonFileHandler) {
-        System.out.println("\n=== Update Base Fare ===");
+        System.out.println("\n=== Set Base Fare ===");
 
         int fromZone = InputHelper.readIntInRange(sc, "Enter from zone (1-5): ", 1, 5);
         int toZone   = InputHelper.readIntInRange(sc, "Enter to zone (1-5): ", 1, 5);
-        CityRideDataset.TimeBand band = InputHelper.readTimeBand(sc, "Enter time band (PEAK/OFF-PEAK): ");
+        CityRideDataset.TimeBand band = InputHelper.readTimeBand(sc, "Enter time band (PEAK/OFF-PEAK (P-Peak/ O-Off Peak): ");
         BigDecimal newFare = InputHelper.readPositiveBigDecimal(sc, "Enter new fare in GBP (e.g. 3.50): ");
 
         configManager.updateBaseFare(fromZone, toZone, band, newFare);
@@ -1697,16 +1698,16 @@ class AdminMenu {
 
 
     private void resetBaseFareUI(Scanner sc, ConfigManager configManager, JsonFileHandler jsonFileHandler) {
-        System.out.println("\n=== Reset Base Fare to Default ===");
+        System.out.println("\n=== Delete Base Fare (Restore Default) ===");
 
         int fromZone = InputHelper.readIntInRange(sc, "Enter from zone (1-5): ", 1, 5);
         int toZone   = InputHelper.readIntInRange(sc, "Enter to zone (1-5): ", 1, 5);
-        CityRideDataset.TimeBand band = InputHelper.readTimeBand(sc, "Enter time band (PEAK/OFF-PEAK): ");
+        CityRideDataset.TimeBand band = InputHelper.readTimeBand(sc, "Enter time band (PEAK/OFF-PEAK (P-Peak/ O-Off Peak): ");
 
         BigDecimal defaultFare = CityRideDataset.getBaseFare(fromZone, toZone, band);
         configManager.updateBaseFare(fromZone, toZone, band, defaultFare);
 
-        System.out.println("Fare reset to default: GBP " + defaultFare);
+        System.out.println("Fare deleted and restored to default: GBP " + defaultFare);
         saveAndReport(configManager, jsonFileHandler);
     }
 
@@ -1715,24 +1716,26 @@ class AdminMenu {
         int choice;
         do {
             System.out.println("\n=== Manage Passenger Discounts ===");
-            System.out.println("1. Update a discount");
-            System.out.println("2. Reset a discount to default");
+            System.out.println("1. Add a discount");
+            System.out.println("2. Update a discount");
+            System.out.println("3. Delete a discount (restore default)");
             System.out.println("0. Back");
 
-            choice = InputHelper.readIntInRange(sc, "Choose an option (0-2): ", 0, 2);
+            choice = InputHelper.readIntInRange(sc, "Choose an option (0-3): ", 0, 3);
 
-            if (choice == 1) {
+            if (choice == 1 || choice == 2) {
                 updateDiscountUI(sc, configManager, jsonFileHandler);
             }
-            else if (choice == 2) {
+            else if (choice == 3) {
                 resetDiscountUI(sc, configManager, jsonFileHandler);
             }
         }
         while (choice != 0);
     }
 
+
     private void updateDiscountUI(Scanner sc, ConfigManager configManager, JsonFileHandler jsonFileHandler) {
-        System.out.println("\n=== Update Passenger Discount ===");
+        System.out.println("\n=== Set Passenger Discount ===");
         printDiscounts(configManager.getCurrentConfig());
 
         CityRideDataset.PassengerType type = InputHelper.readPassengerType(sc,
@@ -1746,7 +1749,7 @@ class AdminMenu {
 
 
     private void resetDiscountUI(Scanner sc, ConfigManager configManager, JsonFileHandler jsonFileHandler) {
-        System.out.println("\n=== Reset Discount to Default ===");
+        System.out.println("\n=== Delete Discount (Restore Default) ===");
         printDiscounts(configManager.getCurrentConfig());
 
         CityRideDataset.PassengerType type = InputHelper.readPassengerType(sc,
@@ -1755,7 +1758,7 @@ class AdminMenu {
         BigDecimal defaultDiscount = CityRideDataset.DISCOUNT_RATE.get(type);
         configManager.updateDiscount(type, defaultDiscount);
 
-        System.out.println("Discount reset to default: " +
+        System.out.println("Discount deleted and restored to default: " +
                 defaultDiscount.multiply(new BigDecimal("100")).setScale(0, RoundingMode.HALF_UP) + "%");
         saveAndReport(configManager, jsonFileHandler);
     }
@@ -1765,16 +1768,17 @@ class AdminMenu {
         int choice;
         do {
             System.out.println("\n=== Manage Daily Caps ===");
-            System.out.println("1. Update a daily cap");
-            System.out.println("2. Reset a daily cap to default");
+            System.out.println("1. Add a daily cap");
+            System.out.println("2. Update a daily cap");
+            System.out.println("3. Delete a daily cap (restore default)");
             System.out.println("0. Back");
 
-            choice = InputHelper.readIntInRange(sc, "Choose an option (0-2): ", 0, 2);
+            choice = InputHelper.readIntInRange(sc, "Choose an option (0-3): ", 0, 3);
 
-            if (choice == 1) {
+            if (choice == 1 || choice == 2) {
                 updateDailyCapUI(sc, configManager, jsonFileHandler);
             }
-            else if (choice == 2) {
+            else if (choice == 3) {
                 resetDailyCapUI(sc, configManager, jsonFileHandler);
             }
         }
@@ -1783,7 +1787,7 @@ class AdminMenu {
 
 
     private void updateDailyCapUI(Scanner sc, ConfigManager configManager, JsonFileHandler jsonFileHandler) {
-        System.out.println("\n=== Update Daily Cap ===");
+        System.out.println("\n=== Set Daily Cap ===");
         printDailyCaps(configManager.getCurrentConfig());
 
         CityRideDataset.PassengerType type = InputHelper.readPassengerType(sc,
@@ -1795,8 +1799,9 @@ class AdminMenu {
         saveAndReport(configManager, jsonFileHandler);
     }
 
+
     private void resetDailyCapUI(Scanner sc, ConfigManager configManager, JsonFileHandler jsonFileHandler) {
-        System.out.println("\n=== Reset Daily Cap to Default ===");
+        System.out.println("\n=== Delete Daily Cap (Restore Default) ===");
         printDailyCaps(configManager.getCurrentConfig());
 
         CityRideDataset.PassengerType type = InputHelper.readPassengerType(sc,
@@ -1805,7 +1810,7 @@ class AdminMenu {
         BigDecimal defaultCap = CityRideDataset.DAILY_CAP.get(type);
         configManager.updateDailyCap(type, defaultCap);
 
-        System.out.println("Daily cap reset to default: GBP " + defaultCap);
+        System.out.println("Daily cap deleted and restored to default: GBP " + defaultCap);
         saveAndReport(configManager, jsonFileHandler);
     }
 
@@ -1816,16 +1821,17 @@ class AdminMenu {
             System.out.println("\n=== Manage Peak Window ===");
             System.out.println("Current: " + configManager.getCurrentConfig().getPeakStart()
                     + " - " + configManager.getCurrentConfig().getPeakEnd());
-            System.out.println("1. Update peak window");
-            System.out.println("2. Reset peak window to default");
+            System.out.println("1. Add / Set peak window");
+            System.out.println("2. Update peak window");
+            System.out.println("3. Delete peak window (restore default 07:00 - 09:00)");
             System.out.println("0. Back");
 
-            choice = InputHelper.readIntInRange(sc, "Choose an option (0-2): ", 0, 2);
+            choice = InputHelper.readIntInRange(sc, "Choose an option (0-3): ", 0, 3);
 
-            if (choice == 1) {
+            if (choice == 1 || choice == 2) {
                 updatePeakWindowUI(sc, configManager, jsonFileHandler);
             }
-            else if (choice == 2) {
+            else if (choice == 3) {
                 resetPeakWindowUI(configManager, jsonFileHandler);
             }
         }
@@ -1834,11 +1840,10 @@ class AdminMenu {
 
 
     private void updatePeakWindowUI(Scanner sc, ConfigManager configManager, JsonFileHandler jsonFileHandler) {
-        System.out.println("\n=== Update Peak Window ===");
+        System.out.println("\n=== Set Peak Window ===");
 
         String peakStart = InputHelper.readTimeString(sc, "Enter new peak start (HH:mm, e.g. 07:00): ");
         String peakEnd   = InputHelper.readTimeString(sc, "Enter new peak end (HH:mm, e.g. 09:00): ");
-
 
         if (peakStart.compareTo(peakEnd) >= 0) {
             System.out.println("ERROR: Start time must be before end time. No changes saved.");
@@ -1851,11 +1856,11 @@ class AdminMenu {
 
 
     private void resetPeakWindowUI(ConfigManager configManager, JsonFileHandler jsonFileHandler) {
-        System.out.println("\n=== Reset Peak Window to Default ===");
+        System.out.println("\n=== Delete Peak Window (Restore Default) ===");
 
         configManager.updatePeakWindow("07:00", "09:00");
 
-        System.out.println("Peak window reset to default: 07:00 - 09:00");
+        System.out.println("Peak window deleted and restored to default: 07:00 - 09:00");
         saveAndReport(configManager, jsonFileHandler);
     }
 
@@ -2168,6 +2173,11 @@ class Journey {
     }
 
     public String toString() {
+        String capApplied = "No";
+        if (chargedFare.compareTo(discountedFare) < 0) {
+            capApplied = "Yes";
+        }
+
         return "ID: " + id
                 + " | " + dateTime.format(DATE_TIME_FORMAT)
                 + " | " + type
@@ -2177,7 +2187,8 @@ class Journey {
                 + " | Base: GBP " + baseFare
                 + " | Discount: GBP " + discountApplied
                 + " | Discounted: GBP " + discountedFare
-                + " | Charged: GBP " + chargedFare;
+                + " | Charged: GBP " + chargedFare
+                + " | Cap applied: " + capApplied;
     }
 }
 
