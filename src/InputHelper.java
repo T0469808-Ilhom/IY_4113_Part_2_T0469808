@@ -5,6 +5,12 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.Scanner;
 
+// A utility class that handles all user input from the console.
+// Every method keeps asking until the user enters a valid value,
+// so no other class needs to worry about validation or error handling.
+// All methods are static because InputHelper holds no state of its own.
+
+
 class InputHelper {
 
     public static int readIntInRange(Scanner scanner, String prompt, int min, int max) {

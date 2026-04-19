@@ -2,6 +2,11 @@ import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.Map;
 
+// Holds the active configuration values used by the system at runtime.
+// This includes all base fares, passenger discounts, daily caps and the peak window.
+// It is populated either from the config file or from default values,
+// and updated immediately whenever the admin makes a change.
+
 class SystemConfig {
 
 

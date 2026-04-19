@@ -3,6 +3,12 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
+// Represents a single journey taken by a rider on a specific day.
+// It stores all the fare details calculated at the time of the journey,
+// including the base fare, the discount applied and the charged fare after the cap.
+// Zones crossed is calculated automatically from the from and to zones
+// so it always stays accurate when either zone is updated.
+
 class Journey {
     private LocalDateTime dateTime;
     private int fromZone;

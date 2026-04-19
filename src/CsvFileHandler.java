@@ -5,6 +5,13 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
+// Handles reading and writing journey data as CSV files.
+// Importing reads an existing file and skips any rows that cannot be parsed,
+// so a corrupt line does not stop the rest of the journeys from loading.
+// Exporting writes the active day's journeys with a header row
+// so the file can be opened in a spreadsheet if needed.
+
+
 class CsvFileHandler {
 
     private static final DateTimeFormatter DATE_TIME_FORMAT =

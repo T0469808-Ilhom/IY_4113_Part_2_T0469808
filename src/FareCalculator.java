@@ -1,5 +1,10 @@
 import java.math.BigDecimal;
 
+
+// Calculates the discounted fare and applies the daily cap for a journey.
+// It is kept separate from JourneyManager so that fare logic has one clear home
+// and does not get mixed in with the journey storage and retrieval code.
+
 class FareCalculator {
 
     public BigDecimal discountedFare(SystemConfig config, int fromZone, int toZone,

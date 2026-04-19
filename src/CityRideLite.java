@@ -1,5 +1,9 @@
 import java.util.Scanner;
 
+// This is the entry point of the CityRide Lite application.
+// It starts the program, sets up all the objects the system needs,
+// and shows the main menu so the user can choose their role.
+
 public class CityRideLite {
 
     public static void main(String[] args) {

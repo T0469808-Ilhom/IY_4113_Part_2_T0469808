@@ -6,6 +6,12 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Scanner;
 
+// Handles everything the rider sees and does in the application.
+// It guides the rider through profile setup, journey management,
+// running totals, and report exports using a series of menus.
+// The active date is stored here because all journey operations
+// are scoped to the day the rider is working with.
+
 class RiderMenu {
     private LocalDate activeDate;
 

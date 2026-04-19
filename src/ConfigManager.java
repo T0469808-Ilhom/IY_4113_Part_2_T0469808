@@ -2,6 +2,12 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 
+// Loads, stores and updates the system configuration.
+// On start app it tries to read the config file, and falls back to safe
+// defaults from CityRideDataset if the file is missing.
+// It also determines the time band for a journey automatically
+// by comparing the journey time against the active peak window.
+
 class ConfigManager {
 
     private SystemConfig currentConfig;

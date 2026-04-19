@@ -3,6 +3,12 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 
+// Reads and writes JSON files for profiles and system configuration.
+// It uses a simple manual parser rather than an external library
+// so the program has no dependencies outside of core Java.
+// It also tracks how many profiles have been created using a counter file,
+// which is how unique profile IDs are generated across sessions.
+
 class JsonFileHandler {
 
     public boolean saveProfile(String filePath, RiderProfile profile) {

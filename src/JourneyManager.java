@@ -4,6 +4,12 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
+// Stores and manages all journeys for the current session.
+// It handles adding, editing and deleting journeys, and recalculates
+// the daily cap across all journeys whenever one is changed or removed.
+// FareCalculator is used here rather than in the menu classes
+// to keep all fare logic in one place.
+
 class JourneyManager {
 
     private List<Journey> journeys;

@@ -2,6 +2,11 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.Scanner;
 
+// Provides a password-protected menu for the administrator.
+// From here the admin can view and change the system configuration
+// including base fares, passenger discounts, daily caps and the peak window.
+// All changes are saved to the config file immediately after each update.
+
 class AdminMenu {
 
     private static final String ADMIN_PASSWORD = "1234";

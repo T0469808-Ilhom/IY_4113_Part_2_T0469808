@@ -1,5 +1,11 @@
-class ProfileManager {
 
+// Manages the rider's profile for the current session.
+// It handles creating a new profile, loading an existing one,
+// and saving it back to file when the rider is done.
+// The current profile is stored here so other classes can access
+// the rider's name, passenger type and payment option.
+
+class ProfileManager {
     private RiderProfile currentProfile;
 
     // Creates a new profile with a generated unique ID

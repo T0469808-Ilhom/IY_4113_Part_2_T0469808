@@ -3,6 +3,12 @@ import java.math.RoundingMode;
 import java.util.HashMap;
 import java.util.Map;
 
+// Holds the default fare data and passenger type values for the system.
+// It is marked as final because it is a fixed reference dataset
+// and should never be extended or modified.
+// ConfigManager reads from here when creating default config values,
+// and AdminMenu reads from here when restoring a deleted config entry.
+
 final class CityRideDataset {
 
     private CityRideDataset() {

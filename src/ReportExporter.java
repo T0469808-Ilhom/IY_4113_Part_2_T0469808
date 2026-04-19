@@ -6,6 +6,12 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
+// Writes the daily summary to an external file in either text or CSV format.
+// It is kept separate from SummaryReport because generating the summary
+// and saving it to disk are two different responsibilities.
+// File names are built by the calling class to include the rider's profile ID,
+// name and active date so each export is uniquely identifiable.
+
 class ReportExporter {
 
     public boolean exportSummaryAsText(String filePath, String riderName,
